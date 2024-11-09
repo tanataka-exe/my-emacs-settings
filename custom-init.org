@@ -1,0 +1,1623 @@
+#+PROPERTY: :header-args :exports code
+* Emacs初期設定
+このファイルはEmacsの初期化設定をOrgモードで記述している。
+
+読み込むには~/.emacs.d/init.elの最初の行に
+
+    (org-babel-load-file (expand-file-name "~/.emacs.d/custom-init.org"))
+    
+を記載して再起動すること。
+** 動作条件
+DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されていることを前提にしている。
+また、~/.emacs.d/themesディレクトリと~/.emacs.d/extensions/themesディレクトリにテーマファイルが存在していることも必要。
+
+** パッケージの初期化 package-initialization
+パッケージ管理機能の設定
+#+BEGIN_SRC emacs-lisp
+  (package-initialize)
+  (require 'package)
+  (add-to-list 'package-archives (cons "melpa" "http://melpa.org/packages/") t)
+  (defun adjust-package-installation (use-package)
+    (dolist (package use-package)
+      (unless (package-installed-p package)
+        (package-install package))))
+#+END_SRC
+** カスタム・テーマのロード・パスを設定する load-paths-for-themes
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'custom-theme-load-path "~/repo/github.com/aharotias2/emacs-utils")
+  (add-to-list 'custom-theme-load-path "~/.emacs.d/extensions/themes")
+  (add-to-list 'custom-theme-load-path "~/.emacs.d/themes")
+#+END_SRC
+** ファイル関連付け file-association
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'auto-mode-alist '("\\.org\\'" . org-mode))
+  (add-to-list 'auto-mode-alist '("\\.log\\'" . text-mode))
+#+END_SRC
+** カスタム関数 custom-functions
+*** dec2hex関数 - 10進数を16進数に変換
+#+BEGIN_SRC emacs-lisp
+  (defun dec2hex (decimal)
+    (let ((s "") (n decimal))
+      (while (> n 0)
+        (let ((m (% n 16)))
+          (setq s (if (< m 10)
+                      (format "%d%s" m s)
+                    (format "%s%s"
+                            (cond ((= m 10) "A")
+                                  ((= m 11) "B")
+                                  ((= m 12) "C")
+                                  ((= m 13) "D")
+                                  ((= m 14) "E")
+                                  ((= m 15) "F"))
+                            s))))
+        (setq n (/ n 16)))
+      s))
+#+END_SRC
+*** hex2dec関数 - 16進数を10進数に変換
+#+BEGIN_SRC emacs-lisp
+  (defun hex2dec (hex)
+    (cl-flet
+        ((one-hex (lambda (c)
+                    (cond ((= c ?0) 0) ((= c ?1) 1)
+                          ((= c ?2) 2) ((= c ?3) 3)
+                          ((= c ?4) 4) ((= c ?5) 5)
+                          ((= c ?6) 6) ((= c ?7) 7)
+                          ((= c ?8) 8) ((= c ?9) 9)
+                          ((or (= c ?A) (= c ?a)) 10)
+                          ((or (= c ?B) (= c ?b)) 11)
+                          ((or (= c ?C) (= c ?c)) 12)
+                          ((or (= c ?D) (= c ?d)) 13)
+                          ((or (= c ?E) (= c ?e)) 14)
+                          ((or (= c ?F) (= c ?f)) 15)))))
+      (seq-reduce (lambda (sum num)
+                    (+ (* sum 16) (one-hex num)))
+                  (append hex nil)
+                  0)))
+#+END_SRC
+*** rgb-shade関数
+#+BEGIN_SRC emacs-lisp
+  (defun rgb-shade (rgb ratio)
+    (let ((r (hex2dec (substring rgb 0 2)))
+          (g (hex2dec (substring rgb 2 4)))
+          (b (hex2dec (substring rgb 4 6))))
+      (kill-new (concat (dec2hex (< 255 (floor (* r ratio))))
+                        (dec2hex (< 255 (floor (* g ratio))))
+                        (dec2hex (< 255 (floor (* b ratio))))))))
+#+END_SRC
+*** time-sum関数 - 時間を合計する
+#+BEGIN_SRC emacs-lisp
+  (defun time-sum(time-list)
+    "時間のリストを受け取り、合計の時間を返す。時間は分の数値と秒の数値のリストで表します。
+  例：(time-sum '((1 29) (4 40) (2 20)))
+  これは「\"1:29\" + \"4:40\" + \"2:20\"」を表し、\"08:29\"を返す。"
+    (if (not (listp time-list))
+        nil
+      (cl-flet ((decode (lambda (time-item)
+                          (let ((minutes (car time-item))
+                                (seconds (car (cdr time-item))))
+                            (+ (* 60 minutes) seconds))))
+                (encode (lambda (seconds)
+                          (format "%02d:%02d" (/ seconds 60) (% seconds 60)))))
+        (let ((sum-seconds 0))
+          (dolist (time-item time-list)
+            (setq sum-seconds (+ sum-seconds (decode time-item))))
+          (encode sum-seconds)))))
+#+END_SRC
+*** count-chars関数 - 文字数を数える
+選択されたリージョン内の文字数を数える。
+#+BEGIN_SRC emacs-lisp
+  (defun count-chars ()
+    "This function counts number of characters which in a region selected."
+    (interactive)
+    (princ (format "The number of characters: %d" (- (region-end) (region-beginning)))))
+#+END_SRc
+*** string-join関数 - 文字列を連結
+文字列を連結する。(開始文字列、連結文字列、終了文字列を指定する)
+#+BEGIN_SRC emacs-lisp
+  (defun string-join (start-mark end-mark delim-mark list &optional func)
+    "This function makes a string formatted as 'start-mark + delimitted-list + end-mark'
+  where delimitted-list is a string that each elements of the list are concatanated separated by the delim-mark."
+    (let ((elem-func (if (null func) (lambda (e) e) func)))
+      (concat start-mark (mapconcat elem-func list delim-mark) end-mark)))
+#+END_SRC
+*** repeat-chars関数 - 反復文字列の作成
+数同じ文字を繰り返す文字列を作る。
+#+BEGIN_SRC emacs-lisp
+  (defun repeat-chars(num str)
+    (let ((i 0) (ret ""))
+      (while (< i num)
+        (setq ret (append ret str)))))
+#+END_SRC
+*** has-value関数
+#+BEGIN_SRC emacs-lisp
+  (defun has-value (symbol) (not (null symbol)))
+#+END_SRC
+*** set-default-mode-for-file関数 - ファイル関連付け
+これ使ってたっけ？
+#+BEGIN_SRC emacs-lisp
+  (defun set-default-mode-for-file (arg-list)
+    (dolist (key-value arg-list)
+      (if (and (has-value (car key-value)) (has-value (cdr key-value)))
+          (add-to-list 'auto-mode-alist (cons (concat "\\" (car key-value) "\\'") (cdr key-value))))))
+#+END_SRC
+*** less関数 - 比較関数
+#+BEGIN_SRC emacs-lisp
+(defun less (a b)
+  (if (< a b) a b))
+#+END_SRC
+*** byte-compile-file-in-dir関数
+ディレクトリ内にある全ての.elファイルをバイトコンパイルする。
+#+BEGIN_SRC emacs-lisp
+  (defun byte-compile-file-in-dir (dir-path)
+    "This function byte-compile all of emacs-lisp files that are contained in the directory which is passed as an argument of this function.
+  Emacs-lisp files must have a extension '.el' in the file names."
+    (let* ((file-list
+            (seq-filter (lambda (a) (string-match "^[^.][^#].+\\.el$" a)) (directory-files dir-path))))
+      (seq-do (lambda (file-name)
+                (let* ((target-file (concat dir-path "/" file-name))
+                       (compiled-file (concat target-file "c")))
+                  (if (file-exists-p compiled-file)
+                      (delete-file compiled-file))
+                  (byte-compile-file target-file)))
+              file-list)))
+#+END_SRC
+*** file-basename関数
+ファイルパスのファイル名部分を返す
+#+BEGIN_SRC emacs-lisp
+(defun file-basename (file-path)
+  "この関数はファイルパスのファイル名部分を返す。"
+  (concat (file-name-base file-path)
+          (if (not (null (file-name-extension file-path)))
+              ".")
+          (file-name-extension file-path)))
+#+END_SRC
+*** byte-compile-my-lib関数
+設定ファイルをバイトコンパイルする
+#+BEGIN_SRC emacs-lisp
+  (defun byte-compile-my-lib()
+    (cl-flet
+        ((list-files-with-filter
+          (lambda (dir-name arg-filter-func)
+            (seq-filter
+             (lambda (file-path)
+               (file-exists-p file-path))
+             (seq-map
+              (lambda (name)
+                (concat dir-name "/" name))
+              (seq-filter arg-filter-func (directory-files dir-name)))))))
+      (dolist (dir-path '("~/.emacs.d" "~/.emacs.d/lib-src"))
+        (byte-compile-file-in-dir dir-path)
+        (dolist (file-path (list-files-with-filter dir-path (lambda (name) (string-suffix-p ".elc" name))))
+          (move-file file-path "~/.emacs.d/lib")))))
+#+END_SRC
+*** exit関数
+設定ファイルをバイトコンパイルし、Emacsを終了する。
+#+BEGIN_SRC emacs-lisp
+  (defun exit ()
+    "This command is used to exit emacs for preventing unwanted exit by some key combination."
+    (interactive)
+    (byte-compile-my-lib)
+    (save-buffers-kill-terminal))
+#+END_SRC
+*** rename-file-and-buffer関数
+現在編集中のバッファと、ファイル名を同時に変更する。
+#+BEGIN_SRC emacs-lisp
+  (defun rename-file-and-buffer (new-name)
+    "Renames both current buffer and file it's visiting to NEW-NAME."
+    (interactive "sNew name: ")
+    (let ((name (buffer-name))
+          (filename (buffer-file-name)))
+      (if (not filename)
+          (message "Buffer '%s' is not visiting a file!" name)
+        (if (get-buffer new-name)
+            (message "A buffer named '%s' already exists!" new-name)
+          (progn
+            (rename-file filename new-name 1)
+            (rename-buffer new-name)
+            (set-visited-file-name new-name)
+            (set-buffer-modified-p nil))))))
+#+END_SRC
+*** times関数
+指定した回数分、関数を呼び出す。
+#+BEGIN_SRC emacs-lisp
+(defun times(num func)
+  (let ((i 0))
+    (while (< i num)
+      (apply func)
+      (setq i (+ i 1)))))
+#+END_SRC
+*** mvn関数
+シェルコマンドのmvnを実行する
+#+BEGIN_SRC emacs-lisp
+(defun mvn (arg-list)
+  (shell-command (append (cons "mvn" arg-list))))
+#+END_SRC
+*** delete-backward-word関数
+カーソル位置の直前にある単語を削除する
+#+BEGIN_SRC emacs-lisp
+  (defun delete-backward-word ()
+    (set-mark (point))
+    (backward-word)
+    (delete-region (point) (mark)))
+#+END_SRC
+*** put-buffer-name関数
+バッファが開いているファイル名をバッファカーソル位置に挿入する。(拡張子は除く)
+#+BEGIN_SRC emacs-lisp
+  (defun put-buffer-name()
+    (interactive)
+    (if (not (null (buffer-file-name)))
+        (skk-insert-str (replace-regexp-in-string
+                         "^.*/" ""
+                         (replace-regexp-in-string
+                          "\.[a-zA-Z0-9]+$"
+                          ""
+                          (buffer-file-name))))))
+#+END_SRC
+*** untabify-all関数
+バッファ全体を選択し、untabifyする。カーソルは元の位置に戻る。
+#+BEGIN_SRC emacs-lisp
+  (defun untabify-all ()
+    "バッファ全体にuntabify関数を適用する"
+    (interactive)
+    (point-to-register ?p)
+    (mark-whole-buffer)
+    (untabify (point-min) (point-max))
+    (jump-to-register ?p)
+    (deactivate-mark))
+#+END_SRC
+*** igrep関数 - 対話的にgrepを実行
+grepコマンドを対話的に実行する関数。
+#+BEGIN_SRC emacs-lisp
+  (defun igrep(word directory)
+    (interactive "s検索する言葉: \ns検索するディレクトリ: ")
+    (grep (string-join nil
+                       nil
+                       " "
+                       `("grep --color -nH --null -r -e"
+                         ,(prin1-to-string word)
+                         ,(prin1-to-string (expand-file-name directory))))))
+#+END_SRC
+*** move-file関数 - ファイルを移動する
+ファイルを指定したディレクトリに移動する
+#+BEGIN_SRC emacs-lisp
+  (defun move-file (file-path dest-dir-path)
+    (catch 'my-err
+      (if (not (file-exists-p file-path))
+          (throw 'my-err "The Specified File does not exist!"))
+      (if (file-exists-p dest-dir-path)
+          (if (not (file-directory-p dest-dir-path))
+              (throw 'my-err "The second argument should be a directory path!"))
+        (if (yes-or-no-p (concat "\"" dest-dir-path "\" does not exist. do you create it? "))
+            (mkdir dest-dir-path t)
+          (throw 'my-err "Exit.")))
+      (let* ((new-file-path (concat dest-dir-path
+                                    (if (not (string-suffix-p "/" dest-dir-path)) "/" "")
+                                    (file-basename file-path))))
+        (rename-file file-path new-file-path t))))
+#+END_SRC
+*** tree-files関数 - ファイルの一覧を再帰的に取得する
+引数のファイルパスを元にファイルリストを作成する。
+引数がディレクトリパスの場合、中のファイルを再帰的にすべて取得する
+引数がディレクトリ以外のパスの場合はそのファイルのみのリストになる
+引数が存在しないパスの場合、nilを返す
+#+BEGIN_SRC emacs-lisp
+  (defun tree-files (path &rest options)
+    "findコマンドのように再帰的なファイルの一覧を取得する。pathは起点となるディレクトリヘのパス。
+  残りの引数ではオプションとしてファイルパスをフィルタリングする文字列を指定できる。
+  :keywordに続く引数は文字列またはリストで、それらにマッチするファイルパスのみを戻り値に含める。"
+    (let ((keyword (plist-get options :keyword)))
+      (seq-filter
+       (lambda (element)
+         (if (not (null keyword))
+             (if (listp keyword)
+                 (seq-reduce
+                  (lambda (result keyword-item)
+                    (and result (string-match keyword-item element)))
+                  keyword
+                  t)
+               (string-match keyword element))
+           t))
+       (if (file-directory-p path)
+           (seq-reduce
+            (lambda (result e)
+              (append result (if (listp e) e (list e))))
+            (seq-map
+             (lambda (child-path)
+               (if (file-directory-p child-path)
+                   (tree-files child-path)
+                 child-path))
+             (seq-map
+              (lambda (child-name)
+                (concat path "/" child-name))
+              (seq-filter
+               (lambda (child-name)
+                 (not (seq-contains-p '("." "..") child-name)))
+               (directory-files path))))
+            (list path))
+         (if (file-exists-p path)
+             (list path)
+           '())))))
+#+END_SRC
+*** my-prettify-c-block-comment関数 - 整形されたCコメントを挿入
+改行時にコメントの記号を補完する。
+[[https://emacs.stackexchange.com/questions/14563/how-to-automatically-create-neat-c-comment-blocks-while-typing][参照URL]]
+
+The below code works fine from my brief testing in a c-mode buffer:
+
+After typing /*, hit M-j, the default binding for indent-new-comment-line (and the default binding for c-indent-new-comment-line in c-mode). If it is the first comment line the closing closing characters */ will be auto-inserted.
+Hitting M-j more times with insert more comment lines with the * prefix. This is the in-built behavior of c-indent-new-comment-line/indent-new-comment-line functions. Check out the Multiple lines of comments documentation.
+An extra nugget in the below code ensures that there is at least one space between the * on each comment line and the comment.
+#+BEGIN_SRC emacs-lisp
+  (defun prettify-c-block-comment (orig-fun &rest args)
+    (let* ((is-first-comment-line (looking-back "/\\*\\s-*.*"))
+           (is-following-comment-line (looking-back "^\\s-*\\*[^/]\\s-*.*"))
+           (star-col-num (if (or is-first-comment-line is-following-comment-line)
+                             (save-excursion
+                               (re-search-backward "/\\*")
+                               (+ 1 (current-column)))
+                           -1)))
+      (apply orig-fun args)
+      (when is-first-comment-line
+        (save-excursion
+          (newline)
+          (dotimes (cnt star-col-num)
+            (insert " "))
+          (insert "*/"))
+        (move-to-column star-col-num) ; comment this line if using bsd style
+        (insert " *") ; comment this line if using bsd style
+        (when (not (looking-back " ")) ; Ensure one space between the asterisk and the comment
+          (insert " ")))
+      (when is-following-comment-line
+        (move-to-column star-col-num)
+        (insert "*")
+        (when (not (looking-back " "))
+          (insert " ")))))
+#+END_SRC
+アドバイスも作る。
+#+BEGIN_SRC emacs-lisp
+  ;;(advice-add 'c-indent-new-comment-line :around #'my-prettify-c-block-comment)
+  ;;(advice-add 'electric-newline-and-maybe-indent :around #'my-prettify-c-block-comment)
+  (advice-add 'tt-newline-and-indent :around #'prettify-c-block-comment)
+
+  ;; (advice-remove 'c-indent-new-comment-line #'my-prettify-c-block-comment)
+#+END_SRC
+
+For instance, after evaluating the above code, I get the below on typing: /* M-j First comment line M-j Second comment line. The ▮ indicates the cursor location at the end of typing.
+Testing offset comment block ..
+
+With cursor after the semicolon, typing: /* M-j Test offset comment gives the below. The ▮ indicates the cursor location at the end of typing.
+*** 使ってない関数
+ずいぶん前に作ったのや、必要がなくなった関数を書いとく。
+**** send-this-buffer-to-server関数
+ファイルの内容をサーバーに送信する。
+tanakapoint (チュートリアルサイト用)
+
+もう使ってない関数だけど、何かの参考になるかもしれないので取っておくか。
+#+BEGIN_SRC emacs-lisp
+  (defun send-this-buffer-to-server ()
+    (interactive)
+    (cl-flet
+        ((send-request
+           ;; request.elを使ってHTTPリクエストを送信する。現在のバッファをファイルとして送信する。
+           (lambda (endpoint-url file-name)
+             (request endpoint-url
+               :type "POST"
+               :files `(("fileToUpload" . (file-name :file ,(buffer-file-name))))
+               :success (cl-function
+                         (lambda (&key data &allow-other-keys)
+                           (message "Successfully sent the contents of file '%s' to the server."
+                                    (buffer-file-name))))
+               :error (cl-function
+                       (lambda (&rest args &key error-thrown &allow-other-keys)
+                         (message "Got error: %S" error-thrown)))))))
+      ;; ファイル名 (バッファ名) の先頭が連番である場合を対象にする。
+      (when (string-match-p "^[0-9]+" (buffer-name))
+        (cond
+         ;; チュートリアル・サイトに送信する
+         ((string-match-p "^/home/ta/tanakapoint/" (buffer-file-name))
+
+          (let ((endpoint-url "http://localhost/filerecievesample2.php")
+                (upload-name (replace-regexp-in-string "/home/ta/tanakapoint" "" (buffer-file-name))))
+            (send-request endpoint-url upload-name)))
+
+         ;; 日記サイトに送信する (未実装)
+         ((string-match-p "^/home/ta/lodia/" (buffer-file-name))
+
+          (let ((endpoint-url "http://blackcube.lodia.lo/files-register.php")
+                (upload-name (replace-regexp-in-string "/home/ta/lodia" "" (buffer-file-name))))
+            nil))
+
+         ;; その他は何もしない
+         (t nil)))))
+#+END_SRC
+**** save-and-send-if-modified関数
+アドバイス関数。
+ファイルを保存する時、更新されているか確認し、更新されている場合、send-this-buffer-to-server関数を実行する。advice-addでsave-bufferに付ける (init.el参照)。
+#+BEGIN_SRC emacs-lisp
+  (defun save-and-send-if-modified (orig-fun &rest args)
+    "Save the current buffer with ORIG-FUN and ARGS.
+  If the buffer was modified before saving, send its content to the server."
+    (let ((was-modified (buffer-modified-p)))
+      (apply orig-fun args)
+      (when was-modified
+        (send-this-buffer-to-server))))
+#+END_SRC
+** カスタムマクロ custom-macros
+*** ifuncマクロ - 対話的lambdaを生成する
+マクロを定義する。cmdは即席のコマンドを定義する。キーバインド設定で使う。
+使用例:
+(global-set-key (kbd "C-x w n") (cmd (other-window 1)))
+(global-set-key (kbd "C-x w p") (cmd (other-window -1)))
+#+BEGIN_SRC emacs-lisp
+(defmacro ifunc (&rest body)
+  (append (list 'lambda '() (list 'interactive)) body))
+#+END_SRC
+** カスタム変数 custom-variables
+*** 色の名前
+洋色大辞典というサイトからカラーコードをパクってきました。
+色名が使えて便利なので。
+
+“世界の伝統色の名前とカラーコードが一目でわかるWEB色見本
+ 世界の伝統色 洋色大辞典 - Traditional Colors of World
+ カタカナ表記される慣用色285色の色名と16進数”
+
+URL: https://www.colordic.org/y
+
+命名規則…洋色大辞典に記載された色の名前の頭に "color-" をつけ、
+          単語間のスペースを"-" (アンダースコア) に変換する。
+
+使い方…洋色大辞典 (https://www.colordic.org/y) を見て使いたい色を見付け、
+        上の命名規則によって決められた色名の変数をemacs-lispコードで使用する。
+#+BEGIN_SRC emacs-lisp
+  ;;コーラルレッド
+  (setq color-coral-red "#ef857d")
+  ;;サンシャインイエロー
+  (setq color-sunshine-yellow "#ffedab")
+  ;;アイスグリーン
+  (setq color-ice-green "#a3d6cc")
+  ;;ウイスタリア
+  (setq color-wistaria "#8d93c8")
+  ;;ピンクアーモンド
+  (setq color-pink-almond "#e3acae")
+  ;;ポピーレッド
+  (setq color-poppy-red "#ea5550")
+  ;;クリームイエロー
+  (setq color-cream-yellow "#fff3b8")
+  ;;ターコイズグリーン
+  (setq color-turquoise-green "#00947a")
+  ;;ブルーラベンダー
+  (setq color-blue-lavender "#a4a8d4")
+  ;;ローズダスト
+  (setq color-rose-dust "#e6c0c0")
+  ;;レッド
+  (setq color-red "#ea5550")
+  ;;ネープルスイエロー
+  (setq color-naples-yellow "#fdd35c")
+  ;;シーグリーン
+  (setq color-sea-green "#00ac97")
+  ;;パンジー
+  (setq color-pannsy "#4d4398")
+  ;;ホワイト
+  (setq color-white "#ffffff")
+  ;;トマトレッド
+  (setq color-tomato-red "#ea5549")
+  ;;トパーズ
+  (setq color-topaz "#e9bc00")
+  ;;ペパーミントグリーン
+  (setq color-peppermint-green "#00ac9a")
+  ;;バイオレット
+  (setq color-violet "#5a4498")
+  ;;スノーホワイト
+  (setq color-snow-white "#fafdff")
+  ;;バーミリオン
+  (setq color-vermilion "#ea553a")
+  ;;クロムイエロー
+  (setq color-chrome-yellow "#fcc800")
+  ;;ピーコックグリーン
+  (setq color-peacock-green "#00a497")
+  ;;ヘリオトロープ
+  (setq color-heliotrope "#9079b6")
+  ;;ピンクホワイト
+  (setq color-pink-white "#fef9fb")
+  ;;スカーレット
+  (setq color-scarlet "#ea5532")
+  ;;クリーム
+  (setq color-cream "#e3d7a3")
+  ;;ナイルブルー
+  (setq color-nile-blue "#2cb4ad")
+  ;;ディープロイヤルパープル
+  (setq color-deep-royal-purple "#47266e")
+  ;;ミルキーホワイト
+  (setq color-milky-white "#fffff9")
+  ;;キャロットオレンジ
+  (setq color-carrot-orange "#ed6d35")
+  ;;ストロー
+  (setq color-straw "#ece093")
+  ;;サックスブルー
+  (setq color-saxe-blue "#418b89")
+  ;;グレープ
+  (setq color-grape "#56256e")
+  ;;アンバーホワイト
+  (setq color-amber-white "#fff9f5")
+  ;;チャイニーズレッド
+  (setq color-chinese-red "#ed6d46")
+  ;;ジャスミンイエロー
+  (setq color-jasmine-yellow "#edde7b")
+  ;;スレートグリーン
+  (setq color-slate-green "#3c7170")
+  ;;モーブ
+  (setq color-mauve "#915da3")
+  ;;ラベンダーアイス
+  (setq color-lavender-ice "#f7f6fb")
+  ;;テラコッタ
+  (setq color-terracotta "#bd6856")
+  ;;アンティックゴールド
+  (setq color-antique-gold "#c1ab05")
+  ;;テールグリーン
+  (setq color-teal-green "#006a6c")
+  ;;アイリス
+  (setq color-iris "#c7a5cc")
+  ;;パールホワイト
+  (setq color-pearl-white "#f7f6f5")
+  ;;ココアブラウン
+  (setq color-cocoa-brown "#98605e")
+  ;;オリーブ
+  (setq color-olive "#72640c")
+  ;;アクアグリーン
+  (setq color-aqua-green "#88bfbf")
+  ;;ライラック
+  (setq color-lilac "#d1bada")
+  ;;アイボリー
+  (setq color-ivory "#f8f4e6")
+  ;;マホガニー
+  (setq color-mahogany "#6b3f31")
+  ;;オリーブドラブ
+  (setq color-olive-drab "#665a1a")
+  ;;アクアマリン
+  (setq color-aquamarine "#67b5b7")
+  ;;ラベンダー
+  (setq color-lavender "#cab8d9")
+  ;;パウダーピンク
+  (setq color-powder-pink "#f5ecf4")
+  ;;チョコレート
+  (setq color-chocolate "#6c3524")
+  ;;ジョンブリアン
+  (setq color-jaune-brillant "#ffdc00")
+  ;;ピーコックブルー
+  (setq color-peacock-blue "#009e9f")
+  ;;クロッカス
+  (setq color-crocus "#b79fcb")
+  ;;シルバーホワイト
+  (setq color-silver-white "#efefef")
+  ;;マルーン
+  (setq color-marron "#6a1917")
+  ;;イエロー
+  (setq color-yellow "#ffdc00")
+  ;;ターコイズ
+  (setq color-turquoise "#009b9f")
+  ;;ラベンダーモーブ
+  (setq color-lavender-mauve "#a688bd")
+  ;;フロスティグレイ
+  (setq color-frosty-gray "#e8ece9")
+  ;;セピア
+  (setq color-sepia "#622d18")
+  ;;シトラス
+  (setq color-citrus "#eddc44")
+  ;;カプリブルー
+  (setq color-capri-blue "#00a3a7")
+  ;;パープル
+  (setq color-purple "#9b72b0")
+  ;;シルバーピンク
+  (setq color-silver-pink "#eeeaec")
+  ;;コーヒー色
+  (setq color-coffee "#7b5544")
+  ;;ライムライト
+  (setq color-limelight "#fff799")
+  ;;ケンブリッジブルー
+  (setq color-cambridge-blue "#25b7c0")
+  ;;ロイヤルパープル
+  (setq color-royal-purple "#7f1184")
+  ;;ベージュカメオ
+  (setq color-beige-cameo "#eee9e6")
+  ;;ブラウン
+  (setq color-brown "#8f6552")
+  ;;カナリヤ
+  (setq color-canary-yellow "#fff462")
+  ;;ターコイズブルー
+  (setq color-turquoise-blue "#00afcc")
+  ;;レーズン
+  (setq color-raisin "#6b395f")
+  ;;エクリュ
+  (setq color-ecru "#eee7e0")
+  ;;バーントシェンナ
+  (setq color-burnt-sienna "#bb5535")
+  ;;ミモザ
+  (setq color-mimosa "#fff462")
+  ;;ホライズンブルー
+  (setq color-horizon-blue "#82cddd")
+  ;;プラム
+  (setq color-plum "#6c2463")
+  ;;ピンクベージュ
+  (setq color-pink-beige "#ede4e1")
+  ;;アンバーローズ
+  (setq color-amber-rose "#e6bfb2")
+  ;;レモンイエロー
+  (setq color-lemon-yellow "#fff352")
+  ;;サマーシャワー
+  (setq color-summer-shower "#a1d8e2")
+  ;;ラズベリー
+  (setq color-raspberry "#841a75")
+  ;;フロスティホワイト
+  (setq color-frosty-white "#e6eae6")
+  ;;ベージュローゼ
+  (setq color-beige-rose "#e8d3ca")
+  ;;メロンイエロー
+  (setq color-melon-yellow "#e0de94")
+  ;;ホリゾンブルー
+  (setq color-horizon-blue "#a1d8e6")
+  ;;フランボワーズ
+  (setq color-framboise "#9a0d7c")
+  ;;オイスターホワイト
+  (setq color-oyster-white "#eae8e1")
+  ;;サーモンピンク
+  (setq color-salmon-pink "#f3a68c")
+  ;;シャルトルーズイエロー
+  (setq color-chartreuse-yellow "#e3e548")
+  ;;セルリアンブルー
+  (setq color-cerulean-blue "#008db7")
+  ;;ダリアパープル
+  (setq color-dahlia-purple "#a50082")
+  ;;ウィステリアミスト
+  (setq color-wisteria-mist "#d3d6dd")
+  ;;サハラ
+  (setq color-sahara "#e29676")
+  ;;ライムイエロー
+  (setq color-lime-yellow "#eaeea2")
+  ;;ダックブルー
+  (setq color-duck-blue "#007199")
+  ;;オーキッドパープル
+  (setq color-orchid-purple "#af0082")
+  ;;クラウド
+  (setq color-cloud "#d4d9df")
+  ;;アッシュローズ
+  (setq color-ash-rose "#e6bfab")
+  ;;ライムグリーン
+  (setq color-lime-green "#e6eb94")
+  ;;マリンブルー
+  (setq color-marine-blue "#006888")
+  ;;ラズベリーレッド
+  (setq color-raspberry-red "#9f166a")
+  ;;ムーングレイ
+  (setq color-moon-gray "#d4d9dc")
+  ;;シェルピンク
+  (setq color-shell-pink "#fbdac8")
+  ;;シャトルーズグリーン
+  (setq color-chartreuse-green "#d9e367")
+  ;;マドンナブルー
+  (setq color-madonna-blue "#00608d")
+  ;;オーキッド
+  (setq color-orchid "#d9aacd")
+  ;;チャイナクレイ
+  (setq color-china-clay "#d4dcd3")
+  ;;ベビーピンク
+  (setq color-baby-pink "#fdede4")
+  ;;レタスグリーン
+  (setq color-lettuce-green "#d1de4c")
+  ;;エジプシャンブルー
+  (setq color-egyptian-blue "#0073a8")
+  ;;リラ
+  (setq color-lilla "#e0b5d3")
+  ;;サンドベージュ
+  (setq color-sand-beige "#dcd6d2")
+  ;;ネールピンク
+  (setq color-nail-pink "#fce4d6")
+  ;;オリーブグリーン
+  (setq color-olive-green "#5f6527")
+  ;;ベビーブルー
+  (setq color-baby-blue "#bbe2f1")
+  ;;ローズタンドル
+  (setq color-rose-tendre "#e6afcf")
+  ;;オーキッドミスト
+  (setq color-orchid-mist "#d3d3d8")
+  ;;ローシェンナ
+  (setq color-raw-sienna "#e17b34")
+  ;;モスグリーン
+  (setq color-moss-green "#777e41")
+  ;;スカイブルー
+  (setq color-sky-blue "#a0d8ef")
+  ;;オーキッドピンク
+  (setq color-orchid-pink "#da81b2")
+  ;;リードグレイ
+  (setq color-reed-gray "#d4d9d6")
+  ;;キャラメル
+  (setq color-caramel "#bc611e")
+  ;;グラスグリーン
+  (setq color-grass-green "#7b8d42")
+  ;;シャドウブルー
+  (setq color-shadow-blue "#719bad")
+  ;;シクラメンピンク
+  (setq color-cyclamen-pink "#d04f97")
+  ;;スカイグレイ
+  (setq color-sky-gray "#cbd0d3")
+  ;;サンセット
+  (setq color-sunset "#f6b483")
+  ;;スプリンググリーン
+  (setq color-spring-green "#9cbb1c")
+  ;;シアン
+  (setq color-cyan "#00a1e9")
+  ;;マゼンタ
+  (setq color-magenta "#e4007f")
+  ;;ラベンダーグレイ
+  (setq color-lavender-gray "#bcbace")
+  ;;シナモン
+  (setq color-cinnamon "#be8f68")
+  ;;リーフグリーン
+  (setq color-leaf-green "#9fc24d")
+  ;;ヨットブルー
+  (setq color-yacht-blue "#409ecc")
+  ;;ブーゲンビリア
+  (setq color-bougainvillaea "#e62f8b")
+  ;;シルバー
+  (setq color-silver "#c9caca")
+  ;;タン
+  (setq color-tan "#bf783e")
+  ;;ホワイトリリー
+  (setq color-white-lily "#f0f6da")
+  ;;チョークブルー
+  (setq color-chalk-blue "#68a9cf")
+  ;;ルビー
+  (setq color-ruby "#c70067")
+  ;;パールグレイ
+  (setq color-pearl-gray "#c9c9c4")
+  ;;シャンパン
+  (setq color-champagne "#e9dacb")
+  ;;アスパラガスグリーン
+  (setq color-asparagus-green "#dbebc4")
+  ;;ピジョンブルー
+  (setq color-pigeon-blue "#88b5d3")
+  ;;クラレット
+  (setq color-claret "#941f57")
+  ;;サンドグレイ
+  (setq color-sand-gray "#c9c9c2")
+  ;;ピーチ
+  (setq color-peach "#fbd8b5")
+  ;;シトロングリーン
+  (setq color-citron-green "#618e34")
+  ;;スモークブルー
+  (setq color-smoke-blue "#a4c1d7")
+  ;;アザレ
+  (setq color-azalee "#d83473")
+  ;;マーブルグレイ
+  (setq color-marble-gray "#c0c5c2")
+  ;;カフェオレ
+  (setq color-cafe-au-lait "#946c45")
+  ;;メドウグリーン
+  (setq color-meadow-green "#65ab31")
+  ;;フロスティブルー
+  (setq color-frosty-blue "#bbdbf3")
+  ;;コスモス
+  (setq color-cosmos "#dc6b9a")
+  ;;オパールグレイ
+  (setq color-opal-gray "#bfbec5")
+  ;;オレンジ
+  (setq color-orange "#ee7800")
+  ;;アップルグリーン
+  (setq color-apple-green "#a7d28d")
+  ;;ブルーアシード
+  (setq color-bleu-acide "#006eb0")
+  ;;ロータスピンク
+  (setq color-lotus-pink "#de82a7")
+  ;;フレンチグレイ
+  (setq color-french-gray "#8da0b6")
+  ;;アプリコット
+  (setq color-apricot "#f7b977")
+  ;;アイビーグリーン
+  (setq color-ivy-green "#578a3d")
+  ;;コバルトブルー
+  (setq color-cobalt-blue "#0068b7")
+  ;;オールドオーキッド
+  (setq color-old-orchid "#e3adc1")
+  ;;ミスト
+  (setq color-mist "#b4aeb1")
+  ;;アンバー
+  (setq color-amber "#c2894b")
+  ;;スピナッチグリーン
+  (setq color-spinach-green "#417038")
+  ;;サファイアブルー
+  (setq color-sapphire-blue "#0068b7")
+  ;;ローズミスト
+  (setq color-rose-mist "#debecc")
+  ;;アッシュブロンド
+  (setq color-ash-blond "#b5b5ae")
+  ;;ブロンズ
+  (setq color-bronze "#ac6b25")
+  ;;カクタス
+  (setq color-cactus "#387d39")
+  ;;スペクトラムブルー
+  (setq color-spectrum-blue "#0075c2")
+  ;;ローズドラジェ
+  (setq color-rose-dragee "#e5c1cd")
+  ;;フォッグ
+  (setq color-fog "#abb1b5")
+  ;;ヴァニラ
+  (setq color-vanilla "#e8c59c")
+  ;;スカイグリーン
+  (setq color-sky-green "#bee0c2")
+  ;;ブルー
+  (setq color-blue "#0075c2")
+  ;;チェリーピンク
+  (setq color-cherry-pink "#eb6ea0")
+  ;;ベージュグレイ
+  (setq color-beige-gray "#b4ada9")
+  ;;コルク
+  (setq color-cork "#c49a6a")
+  ;;スペアミント
+  (setq color-spearmint "#79c06e")
+  ;;ゼニスブルー
+  (setq color-zenith-blue "#4496d3")
+  ;;オペラ
+  (setq color-opera "#e95388")
+  ;;シルバーグレイ
+  (setq color-silver-gray "#afafb0")
+  ;;バーントアンバー
+  (setq color-burnt-umber "#6f5436")
+  ;;ミントグリーン
+  (setq color-mint-green "#89c997")
+  ;;ヘブンリーブルー
+  (setq color-heavenly-blue "#68a4d9")
+  ;;ローズレッド
+  (setq color-rose-red "#ea618e")
+  ;;ストームグレイ
+  (setq color-storm-gray "#aaaab0")
+  ;;ローアンバー
+  (setq color-raw-umber "#866629")
+  ;;パロットグリーン
+  (setq color-parrot-green "#37a34a")
+  ;;オーキッドグレイ
+  (setq color-orchid-gray "#bcc7d7")
+  ;;オールドライラック
+  (setq color-old-lilac "#b0778c")
+  ;;グリーンフォッグ
+  (setq color-green-fog "#abb1ad")
+  ;;フレッシュ
+  (setq color-flesh "#fad09e")
+  ;;サマーグリーン
+  (setq color-summer-green "#009944")
+  ;;パウダーブルー
+  (setq color-powder-blue "#bccddb")
+  ;;ココア色
+  (setq color-cocoa "#6e4a55")
+  ;;アッシュグレイ
+  (setq color-ash-gray "#9fa09e")
+  ;;ゴールデンイエロー
+  (setq color-golden-yellow "#f6ae54")
+  ;;オパールグリーン
+  (setq color-opal-green "#bee0ce")
+  ;;ライトブルー
+  (setq color-light-blue "#b2cbe4")
+  ;;ワインレッド
+  (setq color-wine-red "#b33e5c")
+  ;;ローズグレイ
+  (setq color-rose-gray "#9d8e87")
+  ;;マンダリンオレンジ
+  (setq color-mandarin-orange "#f3981d")
+  ;;スプレイグリーン
+  (setq color-spray-green "#a4d5bd")
+  ;;ベイビーブルー
+  (setq color-baby-blue "#a2c2e6")
+  ;;ガーネット
+  (setq color-garnet "#942343")
+  ;;エレファントスキン
+  (setq color-elephant-skin "#9f9f98")
+  ;;マリーゴールド
+  (setq color-marigold "#f39800")
+  ;;ボトルグリーン
+  (setq color-bottle-green "#004d25")
+  ;;デイドリーム
+  (setq color-day-dream "#a3b9e0")
+  ;;コチニールレッド
+  (setq color-cochineal-red "#c82c55")
+  ;;バトルシップグレイ
+  (setq color-battleship-gray "#898989")
+  ;;エクルベージュ
+  (setq color-ecru-beige "#f6e5cc")
+  ;;コバルトグリーン
+  (setq color-cobalt-green "#3cb37a")
+  ;;サルビアブルー
+  (setq color-salvia-blue "#94adda")
+  ;;ストロベリー
+  (setq color-strawberry "#e73562")
+  ;;ストーングレイ
+  (setq color-stone-gray "#898880")
+  ;;オイスター
+  (setq color-oyster "#eae1cf")
+  ;;エバーグリーン
+  (setq color-evergreen "#00984f")
+  ;;ヒヤシンスブルー
+  (setq color-hyacinth-blue "#7a99cf")
+  ;;ルビーレッド
+  (setq color-ruby-red "#e73562")
+  ;;モスグレイ
+  (setq color-moss-gray "#7e837f")
+  ;;オーカー
+  (setq color-ochre "#ba8b40")
+  ;;マラカイトグリーン
+  (setq color-malachite-green "#009854")
+  ;;ヒヤシンス
+  (setq color-hyacinth "#6c9bd2")
+  ;;カーマイン
+  (setq color-carmine "#d70035")
+  ;;ダブグレイ
+  (setq color-dove-gray "#7d7b83")
+  ;;カーキー
+  (setq color-khaki "#c5a05a")
+  ;;グリーン
+  (setq color-green "#00a960")
+  ;;ミッドナイトブルー
+  (setq color-midnight-blue "#001e43")
+  ;;シグナルレッド
+  (setq color-signal-red "#e8383d")
+  ;;グレイ
+  (setq color-gray "#7d7d7d")
+  ;;バフ
+  (setq color-buff "#caac71")
+  ;;エメラルドグリーン
+  (setq color-emerald-green "#00a968")
+  ;;ネービーブルー
+  (setq color-navy-blue "#202f55")
+  ;;バーガンディー
+  (setq color-burgundy "#6c2735")
+  ;;スチールグレイ
+  (setq color-steel-gray "#736d71")
+  ;;サフランイエロー
+  (setq color-saffron-yellow "#fac559")
+  ;;フォレストグリーン
+  (setq color-forest-green "#288c66")
+  ;;プルシャンブルー
+  (setq color-prussian-blue "#192f60")
+  ;;ボルドー
+  (setq color-bordeaux "#6c272d")
+  ;;アイビーグレイ
+  (setq color-ivy-gray "#666c67")
+  ;;パンプキン
+  (setq color-pumpkin "#e5a323")
+  ;;ビリジアン
+  (setq color-viridian "#00885a")
+  ;;アイアンブルー
+  (setq color-iron-blue "#192f60")
+  ;;カメリア
+  (setq color-camellia "#da536e")
+  ;;スレートグレイ
+  (setq color-slate-gray "#626063")
+  ;;イエローオーカー
+  (setq color-yellow-ocher "#c4972f")
+  ;;ホーリーグリーン
+  (setq color-holly-green "#006948")
+  ;;インディゴ
+  (setq color-indigo "#043c78")
+  ;;ローズ
+  (setq color-rose "#e95464")
+  ;;グラファイト
+  (setq color-graphite "#594e52")
+  ;;ブロンド
+  (setq color-blond "#f2d58a")
+  ;;ビリヤードグリーン
+  (setq color-billiard-green "#005c42")
+  ;;インクブルー
+  (setq color-ink-blue "#003f8e")
+  ;;ローズピンク
+  (setq color-rose-pink "#f19ca7")
+  ;;チャコールグレイ
+  (setq color-charcoal-gray "#4e454a")
+  ;;ベージュ
+  (setq color-beige "#eedcb3")
+  ;;クロムグリーン
+  (setq color-chrome-green "#00533f")
+  ;;オリエンタルブルー
+  (setq color-oriental-blue "#26499d")
+  ;;ピンク
+  (setq color-pink "#f5b2b2")
+  ;;トープ
+  (setq color-taupe "#504946")
+  ;;ビスケット
+  (setq color-biscuit "#ead7a4")
+  ;;アンティークグリーン
+  (setq color-antique-green "#54917f")
+  ;;ウルトラマリンブルー
+  (setq color-ultramarine-blue "#4753a2")
+  ;;フラミンゴピンク
+  (setq color-flamingo-pink "#f5b2ac")
+  ;;ランプブラック
+  (setq color-lamp-black "#24140e")
+  ;;レグホーン
+  (setq color-leghorn "#ffe9a9")
+  ;;ウォーターグリーン
+  (setq color-water-green "#a5c9c1")
+  ;;ウルトラマリン
+  (setq color-ultramarine "#434da2")
+  ;;オールドローズ
+  (setq color-old-rose "#e29399")
+  ;;ブラック
+  (setq color-black "#000000")
+#+END_SRC
+*** スクロール幅の設定
+#+BEGIN_SRC emacs-lisp
+(defvar scroll-amount-at-once 3 "M-nやM-pで一度にスクロールする行数")
+#+END_SRC
+** 変数の設定変更 custom-settings
+*** カーソル・タイプ
+カーソルを2ピクセルの縦棒にする
+#+BEGIN_SRC emacs-lisp
+  (setq-default cursor-type '(bar . 2))
+#+END_SRC
+*** バックアップファイルの無効化
+ファイル保存時にバックアップファイルを作成しない設定"
+#+BEGIN_SRC emacs-lisp
+  (setq make-backup-files nil)
+  (setq auto-save-default nil)
+  (setq create-lockfiles nil)
+#+END_SRC
+*** インデントをタブに変換しない
+インデントをタブに自動変換しないように設定する
+#+BEGIN_SRC emacs-lisp
+  (setq-default indent-tabs-mode nil)
+#+END_SRC
+*** 初期表示画面を変更
+起動時にスプラッシュ画面を表示しない設定にする
+#+BEGIN_SRC emacs-lisp
+  (setq inhibit-startup-message t)
+#+END_SRC
+*** スクラッチ・バッファの初期表示を変更
+#+BEGIN_SRC emacs-lisp
+  (setq initial-scratch-message nil)
+#+END_SRC
+元々のメッセージはこうだった↓。
+#+BEGIN_SRC emacs-lisp
+  ;; This buffer is for text that is not saved, and for Lisp evaluation.
+  ;; To create a file, visit it with find-file and enter text in its buffer.
+  
+#+END_SRC
+*** サーバーモードの設定 (実行しない)
+#+BEGIN_SRC emacs-lisp
+;;(server-mode)
+#+END_SRC
+** カスタム・モード custom-modes
+カスタム・モードの作り方は難しいんだけど、ジェネリック・モードならすぐに作れた。
+それを利用してValaのモードを作ってみた。
+
+*** Valaモード
+tt-vala-modeを作成する。
+
+tt-vala-mode.el --- Major mode for editing Vala code
+
+Copyright (C) 2020 Takayuki Tanaka
+
+Author: Takayuki Tanaka
+Maintainer: Takayuki Tanaka <aharotias2@gmail.com>
+URL: https://github.com/aharotias/tt-vala-mode
+Keywords: languages vala
+Version: 0.1
+Package-Requires: ((emacs "24.3"))
+License: GPL-3.0-or-later
+
+Valaモードに使う色々な関数 (もう内容をあまり思い出せない‥‥‥)
+#+BEGIN_SRC emacs-lisp
+  (setq tt-indent-offset 4)
+
+  (defadvice indent-rigidly (after deactivate-mark-nil activate)
+    (setq deactivate-mark nil))
+
+  (defun tt-indent-region (offset)
+    (let ((p1 (mark))
+          (p2 (point)))
+      (indent-rigidly (min p1 p2) (max p1 p2) offset)))
+
+  (defun tt-indent-right (offset)
+    (let* ((cc (current-column)) (i (+ cc 1)))
+      (while (not (= (% i offset) 0))
+        (setq i (+ i 1)))
+      (indent-to i)))
+
+  (defun tt-indent-left (offset)
+    (let ((save-column (current-column)) (num-killed-chars 0))
+      (beginning-of-line)
+      (while (and (> offset 0) (= (char-after (point)) 32))
+        (delete-char 1)
+        (setq offset (- offset 1))
+        (setq num-killed-chars (+ num-killed-chars 1)))
+      (move-to-column (- save-column num-killed-chars))))
+
+  (defun tt-indent (offset)
+    (if mark-active
+        (tt-indent-region offset)
+      (if (> offset 0)
+          (tt-indent-right offset)
+        (tt-indent-left (- 0 offset)))))
+
+  (defun tt-newline-and-indent ()
+    (if (= 0 (- (point) (line-number-at-pos)))
+        (newline)
+      (let ((auto-indent-offset (let ((before-char (char-before (point))))
+                                  (if (and (not (null before-char)) (or (= before-char 123) (= before-char 40)))
+                                      tt-indent-offset
+                                    0))))
+        (newline)
+        (indent-relative-maybe)
+        (if (> auto-indent-offset 0)
+            (tt-indent auto-indent-offset)))))
+#+END_SRC
+
+Valaのコメント記号
+#+BEGIN_SRC emacs-lisp  
+  (setq tt-vala-comment-list
+        '("//" ("/*" . "*/")))
+#+END_SRC
+
+Valaの予約語一覧
+#+BEGIN_SRC emacs-lisp
+  (setq tt-vala-keyword-list
+        '("if" "else" "switch" "case" "default" "do" "while" "for" "foreach" "in" "break"
+          "continue" "return" "try" "catch" "finally" "throw" "lock" "class" "interface"
+          "struct" "enum" "delegate" "errordomain" "const" "weak" "unowned" "dynamic"
+          "callback" "begin" "end" "abstract" "virtual" "override" "signal" "extern"
+          "static" "async" "inline" "new" "public" "private" "protected" "internal" "out"
+          "ref" "throws" "requires" "ensures" "namespace" "using" "as" "is" "in" "new"
+          "delete" "sizeof" "typeof" "this" "base" "get" "set" "construct" "default"
+          "value" "connect" "construct" "static construct" "class construct" "var" "yield"
+          "global" "owned" "with"))
+
+#+END_SRC
+
+色付けのための正規表現のリスト
+#+BEGIN_SRC emacs-lisp
+  (setq tt-vala-face-list
+        `(("\"\"\".*\"\"\"" . font-lock-string-face)
+          ("\".*\"" . font-lock-string-face)
+          ("'[^']*'" . font-lock-string-face)
+          ("[][+-/*%=^~|{}()!&><;:,.?/@$]" . font-lock-builtin-face)
+          (,(regexp-opt '("true" "false" "null" "void" "int" "uint"
+                          "long" "string" "double" "int8" "uint8"
+                          "int16" "uint16" "int32" "uint32" "int64"
+                          "uint64" "float" "bool" "char" "uchar")
+                        'symbols)
+           . font-lock-builtin-face)
+          ("\\<[@A-Z_][A-Z0-9_]+\\>" . font-lock-constant-face)
+          ("\\<[0-9]+\\>" . font-lock-constant-face)
+          ("\\<[A-Z][A-Za-z0-9_]+\\>" . font-lock-type-face)))
+#+END_SRC
+
+ジェネリック・モードとしてValaモードを作成する
+#+BEGIN_SRC emacs-lisp
+  (define-generic-mode tt-vala-mode
+    tt-vala-comment-list
+    tt-vala-keyword-list
+    tt-vala-face-list
+    '("\\.vala\\'" "\\.vapi\\'")
+    nil
+    ;; &optional docstring
+    "This is a major mode for editing vala programming language")
+#+END_SRC
+** フレームサイズ frame-sizing
+*** init-frame関数
+好みのウィンドウ設定
+スクロールバー：表示する
+メニューバー：表示する
+ツールバー：表示しない
+#+BEGIN_SRC emacs-lisp
+  (defun init-frame()
+    (scroll-bar-mode 0)
+    (menu-bar-mode 0)
+    (tool-bar-mode 0)
+    (set-frame-size (selected-frame) 120 45)
+    (setq line-spacing 0)
+    (set-window-scroll-bars (minibuffer-window) nil nil))
+#+END_SRCん
+*** create-new-frame関数
+新規のフレーム (ウィンドウ) を開き、好みの設定を反映する。
+#+BEGIN_SRC emacs-lisp
+  (defun create-new-frame ()
+    "新しいウィンドウ (フレーム) を開いた時に大きさやスクロールバーなどを調整する。"
+    (select-frame (make-frame))
+    (init-frame))
+#+END_SRC
+** モードごとの設定 mode-settings
+*** DDSKKの設定
+#+BEGIN_SRC emacs-lisp
+  (setq skk-large-jisyo "~/.emacs.d/SKK-JISYO.L")
+#+END_SRC
+*** helmモードの設定
+#+BEGIN_SRC emacs-lisp
+  ;; Helmの設定
+  (require 'helm)
+  ;;(require 'helm-config)
+  (define-key helm-map (kbd "<tab>") 'helm-execute-persistent-action)
+  (define-key helm-map (kbd "C-i") 'helm-execute-persistent-action)
+  (define-key helm-map (kbd "C-z") 'helm-select-action)
+
+  (when (executable-find "curl")
+    (setq helm-google-suggest-use-curl-p t))
+
+  (setq helm-split-window-in-side-p t
+        helm-move-to-line-cycle-in-source t
+        helm-ff-search-library-in-sexp t
+        helm-scroll-amount 8
+        helm-ff-file-name-history-use-recentf t
+        helm-echo-input-in-header-line t
+        helm-autoresize-min-height 20
+        helm-autoresize-max-height 60
+        helm-M-x-fuzzy-match t)
+
+  (defun spacemacs//helm-hide-minibuffer-maybe ()
+    "Hide minibuffer in Helm session if we use the header line as input field."
+    (when (with-helm-buffer helm-echo-input-in-header-line)
+      (let ((ov (make-overlay (point-min) (point-max) nil nil t)))
+        (overlay-put ov 'window (selected-window))
+        (overlay-put ov 'face
+                     (let ((bg-color (face-background 'default nil)))))
+        (setq-local cursor-type nil))))
+
+  (add-hook 'helm-minibuffer-set-up-hook
+            'spacemacs//helm-hide-minibuffer-maybe)
+  (helm-autoresize-mode 1)
+  (helm-mode 1)
+
+#+END_SRC
+*** shellモードの設定
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'shell-script-mode-hook
+            (lambda nil
+              (toggle-truncate-lines 1)
+              (display-line-numbers-mode 1)))
+#+END_SRC
+*** orgモードの設定
+orgモードのキーバインディングには上の方で定義しているifuncマクロを使用している。
+#+BEGIN_SRC emacs-lisp
+  ;; org-modeの設定
+  (add-hook 'org-mode-hook
+            (lambda nil
+              (org-indent-mode)
+              (display-line-numbers-mode 1)
+              (local-set-key (kbd "C-M-f") (ifunc (org-shiftmetaright)))
+              (local-set-key (kbd "C-M-b") (ifunc (org-shiftmetaleft)))
+              (local-set-key (kbd "C-S-f") (ifunc (org-shiftright)))
+              (local-set-key (kbd "C-S-b") (ifunc (org-shiftleft)))
+              (local-set-key (kbd "C-c a") (ifunc (org-agenda)))
+              (local-set-key (kbd "C-M-o") (ifunc (org-insert-heading-after-current)))
+              ;;(local-set-key (kbd "C-c e") (ifunc (emoji-cheat-sheet-plus-insert)))
+              (local-set-key (kbd "C-c h") (ifunc (org-toggle-heading)))
+              (local-set-key (kbd "C-c i") (ifunc (org-toggle-item)))
+              ;;(local-set-key (kbd "C-c C-x e") (ifunc (emoji-cheat-sheet-plus-display-mode)))
+              (local-set-key (kbd "C-o") (ifunc (org-end-of-line)
+                                                (org-return-indent)))
+              (variable-pitch-mode)
+              (visual-line-mode)
+              (emoji-cheat-sheet-plus-display-mode)))
+#+END_SRC
+**** org-insert-block
+org-modeで使うスニペットのような関数
+#+BEGIN_SRC emacs-lisp
+  (defun org-insert-block(language-name)
+    (interactive "slanguage: ")
+    (insert "#+BEGIN_SRC ")
+    (insert language-name)
+    (newline)
+    (newline)
+    (insert "#+END_SRC")
+    (previous-line 1))
+#+END_SRC
+*** CSVモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'csv-mode-hook
+            (lambda nil
+              (display-line-numbers-mode 1)
+              (local-set-key (kbd "M-a") (ifunc (csv-align-fields)))
+              (local-set-key (kbd "M-u") (ifunc (csv-unalign-fields)))
+              (local-set-key (kbd "M-f") (ifunc (csv-forward-field)))
+              (local-set-key (kbd "M-b") (ifunc (csv-backward-field)))))
+#+END_SRC
+*** YAMLモード
+#+BEGIN_SRC emacs-lisp
+(add-hook 'yaml-mode
+          (lambda ()
+            (display-line-numbers-mode 1)
+            (variable-pitch-mode 0)))
+#+END_SRC
+*** Cモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'c-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)
+              (setq c-basic-offset 4)
+              (setq tab-width 4)
+              (setq indent-tabs-mode nil)
+              (local-set-key (kbd "C-c q") 'electric-quote-local-mode)
+              (toggle-truncate-lines)))
+#+END_SRC
+*** Emacs LISPモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'emacs-lisp-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)
+              (local-set-key (kbd "<f5>") 'eval-buffer)))
+#+END_SRC
+*** Makeモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'make-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)
+              (local-set-key (kbd "<f5>") 'compile)))
+#+END_SRC
+*** Markdownモード
+**** 関数
+***** markdown-ex-append-linebreaks-multiline関数
+マークダウンモードで、各行の行末にスペース二つを追加する。
+選択された複数行に渡って適用する。
+#+BEGIN_SRC emacs-lisp
+(defun markdown-ex-append-linebreaks-multiline ()
+  (interactive)
+  ;; markdown-modeの場合のみ処理を行う。
+  (when (string= major-mode "markdown-mode")
+    ;; 領域内の全ての行末にスペースを2つ追加する
+    (replace-regexp "$" "  " nil (point) (mark))))
+#+END_SRC
+***** markdown-append-linebreak関数
+マークダウンモードで、各行の行末にスペース二つを追加する。
+追加した後、次の行に移動する。
+すでに行末にスペース2つがある場合、それを削除する。
+削除した後は、次の行に移動しない。
+#+BEGIN_SRC emacs-lisp
+(defun markdown-ex-append-linebreak()
+  (interactive)
+  ;; markdown-modeの場合のみ処理を行う。
+  (when (string= major-mode "markdown-mode")
+    (let ((previous-column (current-column))) ;; 現在のカラム位置を保存する
+      ;; 行末に移動する
+      (end-of-line)
+      (if (> (current-column) 0)
+          ;; 現在の行が空行でない場合
+          (let ((last-two-characters (buffer-substring-no-properties (- (point) 2) (point))))
+            (if (string= "  " last-two-characters)
+                ;; 行末にスペースが2つある場合
+                (progn
+                  ;; 行末のスペースを削除する
+                  (backward-delete-char 2)
+                  ;; 保存したカラム位置に移動する (カーソルが移動していないように見えるようにする)
+                  (move-to-column previous-column))
+              ;; 行末にスペースが2つない場合
+              (progn
+                ;; 行末にスペースを2つ追加
+                (insert "  ")
+                ;; 次の行に進む
+                (if (= (forward-line 1) 0)
+                    ;; 次の行がある場合
+                    (progn
+                      ;; 行末に移動
+                      (end-of-line)
+                      (if (< previous-column (current-column))
+                          ;; 保存したカラム位置に移動する (真下に移動したように見えるようにする)
+                          (move-to-column previous-column)))
+                  ;; 次の行がない場合、改行のみ行う
+                  (newline)))))
+        ;; 現在の行が空行の場合1行進む
+        (if (> (forward-line 1) 0)
+            ;; 最後の行の場合、改行 (行を追加) する
+            (newline))))))
+#+END_SRC
+***** markdown-ex-append-linebreak-and-open関数
+#+BEGIN_SRC emacs-lisp
+  (defun markdown-ex-append-linebreak-and-open ()
+    (interactive)
+    (when (string= major-mode "markdown-mode")
+      (markdown-ex-append-linebreak)
+      (beginning-of-line)
+      (open-line 1)))
+#+END_SRC
+***** markdown-ex-add-category関数
+#+BEGIN_SRC emacs-lisp
+  (defun markdown-ex-add-category (new-category-name)
+    (interactive "Mcategory name: ")
+    (point-to-register ?x)
+    (beginning-of-buffer)
+    (insert "---\nカテゴリ:" new-category-name "\n---\n"))
+#+END_SRC
+***** my-adjoin-to-list-or-symbol関数
+可変幅フォントを使う為の設定。[[https://yoo2080.wordpress.com/2013/05/30/monospace-font-in-tables-and-source-code-blocks-in-org-mode-proportional-font-in-other-parts/][このURL]]を参照
+cl-adjoinは追加したい要素がリストに含まれていない場合のみ、その先頭に追加する関数。
+この関数はリストがリストでない場合にはそれをリストにしてから実行するようになっている。
+#+BEGIN_SRC emacs-lisp
+  (defun my-adjoin-to-list-or-symbol (element list-or-symbol)
+    (let ((list (if (not (listp list-or-symbol))
+                    (list list-or-symbol)
+                  list-or-symbol)))
+      (require 'cl-lib)
+      (cl-adjoin element list)))
+#+END_SRC
+**** Markdownの設定
+理屈はよくわからないが、この設定をすることでテーブルとコードのフォントのみ等幅になる。
+#+BEGIN_SRC emacs-lisp
+  (eval-after-load "markdown-mode"
+    '(mapc
+      (lambda (face)
+        (set-face-attribute
+         face nil
+         :inherit
+         (my-adjoin-to-list-or-symbol
+          'fixed-pitch
+          (face-attribute face :inherit))))
+      (list 'markdown-pre-face 'markdown-inline-code-face 'markdown-table-face)))
+#+END_SRC
+
+Markdownモードの設定を行なう。
+#+BEGIN_SRC emacs-lisp
+  (autoload 'markdown-preview-mode "markdown-preview-mode.el" t)
+
+  (add-hook 'markdown-mode-hook
+            (lambda nil
+              (display-line-numbers-mode)
+              ;;(auto-fill-mode t)
+              (setq fill-column 100)
+              (variable-pitch-mode 1) ;; デフォルトのフォントを可変幅フォントにする
+              (electric-quote-local-mode 1)
+              (visual-line-mode 1)
+              (skk-mode 1)
+              (local-set-key (kbd "C-c C-c k") 'markdown-ex-add-category)
+              (local-set-key (kbd "C-c q") 'electric-quote-local-mode)
+              (local-set-key (kbd "C-c C-m") 'markdown-ex-append-linebreaks-multiline)
+              (local-set-key (kbd "M-m") 'markdown-ex-append-linebreak)
+              (local-set-key (kbd "M-n") (ifunc (scroll-up scroll-amount-at-once)))
+              (local-set-key (kbd "M-p") (ifunc (scroll-down scroll-amount-at-once)))
+              (local-set-key (kbd "C-c m") (ifunc (markdown-ex-append-linebreak)
+                                                  (beginning-of-line)
+                                                  (open-line 1)))))
+
+#+END_SRC
+*** Webモードの設定
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'web-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)
+              (local-set-key (kbd "<f5>") 'web-mode)))
+#+END_SRC
+*** nXMLモードの設定
+#+BEGIN_SRC emacs-lisp
+;; auto-complete-nxmlの設定
+;; Keystroke for popup help about something at point.
+(setq auto-complete-nxml-popup-help-key "C-,")
+;; Keystroke for toggle on/off automatic completion.
+(setq auto-complete-nxml-toggle-automatic-key "C-c C-t")
+;; If you want to start completion manually from the beginning
+(setq auto-complete-nxml-automatic-p nil)
+#+END_SRC
+*** Javaモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'java-mode-hook
+            (lambda ()
+              (setq c-default-style "java")
+              (c-set-offset 'arglist-intro '+)
+              (c-set-offset 'arglist-close '0)
+              (c-set-offset 'case-label '+)
+              (display-line-numbers-mode 1)
+              (local-set-key-list
+               '(("<f5>" (mvn "package"))))))
+#+END_SRC
+*** JavaScriptモード
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'auto-mode-alist '("\\.jsx?\\'" . js-jsx-mode))
+  (add-hook 'js-jsx-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)))
+#+END_SRC
+*** テキスト・モード
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'auto-mode-alist '("\\.te?xt\\'" . text-mode))
+  (add-hook 'text-mode-hook
+            (lambda ()
+              (display-line-numbers-mode)
+              (if (not (string-suffix-p ".log" (buffer-name)))
+                  (variable-pitch-mode 1))))
+#+END_SRC
+*** Viewモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'view-mode-hook
+            (lambda ()
+              (display-line-numbers-mode 1)
+              (view-mode-hook--origami)))
+#+END_SRC
+*** Mesonモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'meson-mode
+            (lambda ()
+              (display-line-numbers-mode)))
+#+END_SRC
+*** CSSモード
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'css-mode
+            (lambda ()
+              (display-line-numbers-mode)))
+#+END_SRC
+*** コンパイラー設定
+#+BEGIN_SRC emacs-lisp
+  (require 'ansi-color)
+  (defun endless/colorize-compilation ()
+    "Colorize from `compilation-filter-start' to `point'."
+    (let ((inhibit-read-only t))
+      (ansi-color-apply-on-region
+       compilation-filter-start (point))))
+
+  (add-hook 'compilation-filter-hook
+            #'endless/colorize-compilation)
+#+END_SRC
+** キーバインディング設定 key-binding
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-.") 'set-mark-command)
+  (global-set-key (kbd "C-h") (ifunc (backward-delete-char-untabify 1)))
+  (global-set-key (kbd "C-}") (ifunc (other-window 1)))
+  (global-set-key (kbd "C-{") (ifunc (other-window -1)))
+  (global-set-key (kbd "C-k") (ifunc (if (= 0 (current-column))
+                                         (kill-line 1)
+                                       (kill-line))))
+  (global-set-key (kbd "M-n") (ifunc (scroll-up scroll-amount-at-once)))
+  (global-set-key (kbd "<mouse-5>") (ifunc (scroll-up scroll-amount-at-once)))
+  (global-set-key (kbd "M-<down>") (ifunc (scroll-up scroll-amount-at-once)))
+  (global-set-key (kbd "M-p") (ifunc (scroll-down scroll-amount-at-once)))
+  (global-set-key (kbd "<mouse-4>") (ifunc (scroll-down scroll-amount-at-once)))
+  (global-set-key (kbd "M-<up>") (ifunc (scroll-down scroll-amount-at-once)))
+  (global-set-key (kbd "C-c C-n") (ifunc (next-line 5)))
+  (global-set-key (kbd "C-c C-p") (ifunc (previous-line 5)))
+  (global-set-key (kbd "C-S-n") (ifunc (forward-paragraph 1)
+                                       (skip-chars-forward "[:blank:][:cntrl:]")))
+  (global-set-key (kbd "C-S-p") (ifunc (let ((save-point (point)))
+                                         (backward-paragraph 1)
+                                         (skip-chars-forward "[:blank:][:cntrl:]")
+                                         (when (= (point) save-point)
+                                           (backward-paragraph 2)
+                                           (skip-chars-forward "[:blank:][:cntrl:]")))))
+  (global-set-key (kbd "M-h") (ifunc (delete-backward-word)))
+  (global-set-key (kbd "M-f") (ifunc (let ((save-point (point)))
+                                       (skip-chars-forward "[:blank:][:cntrl:][:punct:]")
+                                       (when (= (point) save-point)
+                                         (forward-word)
+                                         (skip-chars-forward "[:blank:][:cntrl:][:punct:]")))))
+  (global-set-key (kbd "C-c f") 'replace-string)
+  (global-set-key (kbd "C-c r") 'replace-regexp)
+  (global-set-key (kbd "C-z") nil)
+  (global-set-key (kbd "C-x C-j") 'skk-mode)
+  (global-set-key (kbd "C-x C-f") (ifunc (helm-find-files nil)))
+  (global-set-key (kbd "M-x") 'helm-M-x)
+  (global-set-key (kbd "C-x /") 'helm-show-kill-ring)
+  (global-set-key (kbd "C-x j") 'skk-auto-fill-mode)
+  (global-set-key (kbd "M-j") (ifunc (move-end-of-line nil)
+                                     (forward-char)
+                                     (delete-indentation)))
+  (global-set-key (kbd "C-x t") 'skk-tutorial)
+  (global-set-key (kbd "C-:") 'goto-line)
+  (global-set-key (kbd "C-c C-r") 'revert-buffer)
+  (global-set-key (kbd "C-c e") 'emojify-insert-emoji)
+  (global-set-key (kbd "M-[") 'backward-paragraph)
+  (global-set-key (kbd "M-]") 'forward-paragraph)
+  (global-set-key (kbd "M-{") nil)
+  (global-set-key (kbd "M-}") nil)
+  (global-set-key (kbd "C-x C-z") nil)
+  ;;(global-set-key (kbd "C-x C-c") nil)
+  (global-set-key (kbd "C-c C-x C-r") 'revert-buffer)
+  (global-set-key (kbd "C-x C-r") 'recently-show)
+  ;;(global-set-key (kbd "C-c C-x C-q") 'exit)
+  (global-set-key (kbd "C-c C-x C-w") (ifunc (let ((question "Do you really kill this buffer? [yes or no]: "))
+                                               (if (buffer-modified-p)
+                                                   (if (string= (read-string question) "yes")
+                                                       (kill-current-buffer)
+                                                     (princ "(Request was canceled)"))
+                                                 (princ "(Request was canceled)")))))
+  (global-set-key (kbd "C-c C-x C-s") 'rename-file-and-buffer)
+  (global-set-key (kbd "C-\\") nil)
+  (global-set-key (kbd "<zenkaku-hankaku>") 'toggle-input-method)
+  (global-set-key (kbd "C-_") nil)
+  (global-set-key (kbd "C-x 5 2") (ifunc (create-new-frame)))
+  (global-set-key (kbd "C-c C-c f") (ifunc (skk-insert-str (buffer-name))))
+  (global-set-key (kbd "C-c n") 'put-buffer-name)
+  (global-set-key (kbd "C-c c") 'revert-comment)
+  (global-set-key (kbd "C-c C-c s") 'send-this-buffer-to-server)
+  (global-set-key (kbd "M-e") 'forward-word)
+#+END_SRC
+
+
