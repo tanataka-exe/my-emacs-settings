@@ -1211,7 +1211,11 @@ Valaの予約語一覧
     (set-frame-size (selected-frame) 120 45)
     (setq line-spacing 0)
     (set-window-scroll-bars (minibuffer-window) nil nil))
-#+END_SRCん
+#+END_SRC
+フレームの初期設定実行
+#+BEGIN_SRC emacs-lisp
+  (init-frame)
+#+END_SRC
 *** create-new-frame関数
 新規のフレーム (ウィンドウ) を開き、好みの設定を反映する。
 #+BEGIN_SRC emacs-lisp
@@ -1476,6 +1480,7 @@ Markdownモードの設定を行なう。
   (add-hook 'web-mode-hook
             (lambda ()
               (display-line-numbers-mode 1)
+              (setq web-mode-markup-indent-offset 2)
               (local-set-key (kbd "<f5>") 'web-mode)))
 #+END_SRC
 *** nXMLモードの設定
