@@ -1,4 +1,5 @@
-#+PROPERTY: :header-args :exports code
+#+TITLE: Emacs Config
+#+PROPERTY: :header-args :exports code :tangle init.el
 * Emacs初期設定
 このファイルはEmacsの初期化設定をOrgモードで記述している。
 
@@ -45,6 +46,18 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
   (add-to-list 'custom-theme-load-path "~/.emacs.d/themes")
 #+END_SRC
 
+** 自作ライブラリのロード・パスを追加
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'load-path "~/.emacs.d/lisp")
+#+END_SRC
+
+** モード有効化
+
+#+BEGIN_SRC emacs-lisp
+  (global-font-lock-mode t)
+#+END_SRC
+
 ** ファイル関連付け file-association
 
 #+BEGIN_SRC emacs-lisp
@@ -54,29 +67,89 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
   (add-to-list 'auto-mode-alist '("\\.html\\'" . web-mode))
 #+END_SRC
 
+** フレームサイズ frame-sizing
+
+*** 好みのフレームサイズを設定する
+
+#+BEGIN_SRC emacs-lisp
+  ;;(add-to-list 'default-frame-alist '(left   . 50))
+  ;;(add-to-list 'default-frame-alist '(top    . 0))
+  (add-to-list 'default-frame-alist '(height . 45))
+  (add-to-list 'default-frame-alist '(width  . 120))
+#+END_SRC
+
+*** init-frame関数
+好みのウィンドウ設定
+スクロールバー：表示する
+メニューバー：表示する
+ツールバー：表示しない
+
+#+BEGIN_SRC emacs-lisp
+  (defun init-frame()
+    (message "init-frame was called")
+    (scroll-bar-mode 0)
+    (menu-bar-mode 0)
+    (tool-bar-mode 0)
+    ;;(set-frame-size (selected-frame) 120 45)
+    (setq line-spacing 0)
+    (set-window-scroll-bars (minibuffer-window) nil nil))
+#+END_SRC
+
+フレームの初期設定実行
+
+#+BEGIN_SRC emacs-lisp
+  (init-frame)
+#+END_SRC
+
+*** create-new-frame関数
+新規のフレーム (ウィンドウ) を開き、好みの設定を反映する。
+
+#+BEGIN_SRC emacs-lisp
+  (defun create-new-frame ()
+    "新しいウィンドウ (フレーム) を開いた時に大きさやスクロールバーなどを調整する。"
+    (select-frame (make-frame))
+    (init-frame))
+#+END_SRC
+
+*** フレームを新規作成したときのカスタムフックを設定する
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'before-make-frame-hook
+            (lambda ()
+              (init-frame)))
+  (add-hook 'server-after-make-frame-hook
+            (lambda ()
+              (init-frame)))
+#+END_SRC
+
 ** カスタム関数 custom-functions
-*** dec2hex関数 - 10進数を16進数に変換
+*** 16進数系関数
+**** dec2hex関数 - 10進数を16進数に変換
 
 #+BEGIN_SRC emacs-lisp
   (defun dec2hex (decimal)
-    (let ((s "") (n decimal))
-      (while (> n 0)
-        (let ((m (% n 16)))
-          (setq s (if (< m 10)
-                      (format "%d%s" m s)
-                    (format "%s%s"
-                            (cond ((= m 10) "A")
-                                  ((= m 11) "B")
-                                  ((= m 12) "C")
-                                  ((= m 13) "D")
-                                  ((= m 14) "E")
-                                  ((= m 15) "F"))
-                            s))))
-        (setq n (/ n 16)))
-      s))
+    (if (or (stringp decimal) (numberp decimal))
+        (let ((s "") (n (if (stringp decimal)
+                            (string-to-number decimal)
+                          decimal)))
+          (while (> n 0)
+            (let ((m (% n 16)))
+              (setq s (if (< m 10)
+                          (format "%d%s" m s)
+                        (format "%s%s"
+                                (cond ((= m 10) "A")
+                                      ((= m 11) "B")
+                                      ((= m 12) "C")
+                                      ((= m 13) "D")
+                                      ((= m 14) "E")
+                                      ((= m 15) "F"))
+                                s))))
+            (setq n (/ n 16)))
+          s)
+      (message "Wrong Type Of Arguments (string or number is required)")))
 #+END_SRC
 
-*** hex2dec関数 - 16進数を10進数に変換
+**** hex2dec関数 - 16進数を10進数に変換
 
 #+BEGIN_SRC emacs-lisp
   (defun hex2dec (hex)
@@ -99,7 +172,7 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
                   0)))
 #+END_SRC
 
-*** rgb-shade関数
+**** rgb-shade関数
 
 #+BEGIN_SRC emacs-lisp
   (defun rgb-shade (rgb ratio)
@@ -111,7 +184,15 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
                         (dec2hex (< 255 (floor (* b ratio))))))))
 #+END_SRC
 
-*** time-sum関数 - 時間を合計する
+*** 数値関数
+**** less関数 - 比較関数
+
+#+BEGIN_SRC emacs-lisp
+(defun less (a b)
+  (if (< a b) a b))
+#+END_SRC
+*** 時間関数
+**** time-sum関数 - 時間を合計する
 
 #+BEGIN_SRC emacs-lisp
   (defun time-sum(time-list)
@@ -132,7 +213,8 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
           (encode sum-seconds)))))
 #+END_SRC
 
-*** count-chars関数 - 文字数を数える
+*** 文字系関数
+**** count-chars関数 - 文字数を数える
 選択されたリージョン内の文字数を数える。
 
 #+BEGIN_SRC emacs-lisp
@@ -140,8 +222,8 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
     "This function counts number of characters which in a region selected."
     (interactive)
     (princ (format "The number of characters: %d" (- (region-end) (region-beginning)))))
-#+END_SRc
-*** string-join関数 - 文字列を連結
+#+END_SRC
+**** string-join関数 - 文字列を連結
 文字列を連結する。(開始文字列、連結文字列、終了文字列を指定する)
 
 #+BEGIN_SRC emacs-lisp
@@ -152,7 +234,7 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
       (concat start-mark (mapconcat elem-func list delim-mark) end-mark)))
 #+END_SRC
 
-*** repeat-chars関数 - 反復文字列の作成
+**** repeat-chars関数 - 反復文字列の作成
 数同じ文字を繰り返す文字列を作る。
 
 #+BEGIN_SRC emacs-lisp
@@ -162,48 +244,34 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
         (setq ret (append ret str)))))
 #+END_SRC
 
-*** has-value関数
+しかしmake-string関数で良いみたいだな。
+
+**** delete-backward-word関数
+カーソル位置の直前にある単語を削除する
 
 #+BEGIN_SRC emacs-lisp
-  (defun has-value (symbol) (not (null symbol)))
+  (defun delete-backward-word ()
+    (set-mark (point))
+    (backward-word)
+    (delete-region (point) (mark)))
 #+END_SRC
 
-*** set-default-mode-for-file関数 - ファイル関連付け
-これ使ってたっけ？
+**** untabify-all関数
+バッファ全体を選択し、untabifyする。カーソルは元の位置に戻る。
 
 #+BEGIN_SRC emacs-lisp
-  (defun set-default-mode-for-file (arg-list)
-    (dolist (key-value arg-list)
-      (if (and (has-value (car key-value)) (has-value (cdr key-value)))
-          (add-to-list 'auto-mode-alist (cons (concat "\\" (car key-value) "\\'") (cdr key-value))))))
+  (defun untabify-all ()
+    "バッファ全体にuntabify関数を適用する"
+    (interactive)
+    (point-to-register ?p)
+    (mark-whole-buffer)
+    (untabify (point-min) (point-max))
+    (jump-to-register ?p)
+    (deactivate-mark))
 #+END_SRC
 
-*** less関数 - 比較関数
-
-#+BEGIN_SRC emacs-lisp
-(defun less (a b)
-  (if (< a b) a b))
-#+END_SRC
-
-*** byte-compile-file-in-dir関数
-ディレクトリ内にある全ての.elファイルをバイトコンパイルする。
-
-#+BEGIN_SRC emacs-lisp
-  (defun byte-compile-file-in-dir (dir-path)
-    "This function byte-compile all of emacs-lisp files that are contained in the directory which is passed as an argument of this function.
-  Emacs-lisp files must have a extension '.el' in the file names."
-    (let* ((file-list
-            (seq-filter (lambda (a) (string-match "^[^.][^#].+\\.el$" a)) (directory-files dir-path))))
-      (seq-do (lambda (file-name)
-                (let* ((target-file (concat dir-path "/" file-name))
-                       (compiled-file (concat target-file "c")))
-                  (if (file-exists-p compiled-file)
-                      (delete-file compiled-file))
-                  (byte-compile-file target-file)))
-              file-list)))
-#+END_SRC
-
-*** file-basename関数
+*** ファイル系関数
+**** file-basename関数
 ファイルパスのファイル名部分を返す
 
 #+BEGIN_SRC emacs-lisp
@@ -215,39 +283,17 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
           (file-name-extension file-path)))
 #+END_SRC
 
-*** byte-compile-my-lib関数
-設定ファイルをバイトコンパイルする
+**** set-default-mode-for-file関数 - ファイル関連付け
+これ使ってたっけ？
 
 #+BEGIN_SRC emacs-lisp
-  (defun byte-compile-my-lib()
-    (cl-flet
-        ((list-files-with-filter
-          (lambda (dir-name arg-filter-func)
-            (seq-filter
-             (lambda (file-path)
-               (file-exists-p file-path))
-             (seq-map
-              (lambda (name)
-                (concat dir-name "/" name))
-              (seq-filter arg-filter-func (directory-files dir-name)))))))
-      (dolist (dir-path '("~/.emacs.d" "~/.emacs.d/lib-src"))
-        (byte-compile-file-in-dir dir-path)
-        (dolist (file-path (list-files-with-filter dir-path (lambda (name) (string-suffix-p ".elc" name))))
-          (move-file file-path "~/.emacs.d/lib")))))
+  (defun set-default-mode-for-file (arg-list)
+    (dolist (key-value arg-list)
+      (if (and (has-value (car key-value)) (has-value (cdr key-value)))
+          (add-to-list 'auto-mode-alist (cons (concat "\\" (car key-value) "\\'") (cdr key-value))))))
 #+END_SRC
 
-*** exit関数
-設定ファイルをバイトコンパイルし、Emacsを終了する。
-
-#+BEGIN_SRC emacs-lisp
-  (defun exit ()
-    "This command is used to exit emacs for preventing unwanted exit by some key combination."
-    (interactive)
-    (byte-compile-my-lib)
-    (save-buffers-kill-terminal))
-#+END_SRC
-
-*** rename-file-and-buffer関数
+**** rename-file-and-buffer関数
 現在編集中のバッファと、ファイル名を同時に変更する。
 
 #+BEGIN_SRC emacs-lisp
@@ -267,64 +313,7 @@ DDSKKを使っているので、~/.emacs.d/SKK-JISYO.Lが配置されている�
             (set-buffer-modified-p nil))))))
 #+END_SRC
 
-*** times関数
-指定した回数分、関数を呼び出す。
-
-#+BEGIN_SRC emacs-lisp
-(defun times(num func)
-  (let ((i 0))
-    (while (< i num)
-      (apply func)
-      (setq i (+ i 1)))))
-#+END_SRC
-
-*** mvn関数
-シェルコマンドのmvnを実行する
-
-#+BEGIN_SRC emacs-lisp
-(defun mvn (arg-list)
-  (shell-command (append (cons "mvn" arg-list))))
-#+END_SRC
-
-*** delete-backward-word関数
-カーソル位置の直前にある単語を削除する
-
-#+BEGIN_SRC emacs-lisp
-  (defun delete-backward-word ()
-    (set-mark (point))
-    (backward-word)
-    (delete-region (point) (mark)))
-#+END_SRC
-
-*** untabify-all関数
-バッファ全体を選択し、untabifyする。カーソルは元の位置に戻る。
-
-#+BEGIN_SRC emacs-lisp
-  (defun untabify-all ()
-    "バッファ全体にuntabify関数を適用する"
-    (interactive)
-    (point-to-register ?p)
-    (mark-whole-buffer)
-    (untabify (point-min) (point-max))
-    (jump-to-register ?p)
-    (deactivate-mark))
-#+END_SRC
-
-*** igrep関数 - 対話的にgrepを実行
-grepコマンドを対話的に実行する関数。
-
-#+BEGIN_SRC emacs-lisp
-  (defun igrep(word directory)
-    (interactive "s検索する言葉: \ns検索するディレクトリ: ")
-    (grep (string-join nil
-                       nil
-                       " "
-                       `("grep --color -nH --null -r -e"
-                         ,(prin1-to-string word)
-                         ,(prin1-to-string (expand-file-name directory))))))
-#+END_SRC
-
-*** move-file関数 - ファイルを移動する
+**** move-file関数 - ファイルを移動する
 ファイルを指定したディレクトリに移動する
 
 #+BEGIN_SRC emacs-lisp
@@ -344,7 +333,7 @@ grepコマンドを対話的に実行する関数。
         (rename-file file-path new-file-path t))))
 #+END_SRC
 
-*** tree-files関数 - ファイルの一覧を再帰的に取得する
+**** tree-files関数 - ファイルの一覧を再帰的に取得する
 引数のファイルパスを元にファイルリストを作成する。
 引数がディレクトリパスの場合、中のファイルを再帰的にすべて取得する
 引数がディレクトリ以外のパスの場合はそのファイルのみのリストになる
@@ -389,7 +378,85 @@ grepコマンドを対話的に実行する関数。
            '())))))
 #+END_SRC
 
-*** my-prettify-c-block-comment関数 - 整形されたCコメントを挿入
+*** Lispユーティリティ系関数
+**** has-value関数
+
+#+BEGIN_SRC emacs-lisp
+  (defun has-value (symbol) (not (null symbol)))
+#+END_SRC
+
+**** times関数
+指定した回数分、関数を呼び出す。
+
+#+BEGIN_SRC emacs-lisp
+(defun times(num func)
+  (let ((i 0))
+    (while (< i num)
+      (apply func)
+      (setq i (+ i 1)))))
+#+END_SRC
+
+*** Emacsユーティリティ関数
+**** 無名のバッファを作成する
+#+BEGIN_SRC emacs-lisp
+  (defun generate-buffer ()
+    (interactive)
+    (switch-to-buffer (make-temp-name "New Buffer ")))
+#+END_SRC
+
+**** バイトコンパイル系関数
+***** byte-compile-file-in-dir関数
+ディレクトリ内にある全ての.elファイルをバイトコンパイルする。
+
+#+BEGIN_SRC emacs-lisp
+  (defun byte-compile-file-in-dir (dir-path)
+    "This function byte-compile all of emacs-lisp files that are contained in the directory which is passed as an argument of this function.
+  Emacs-lisp files must have a extension '.el' in the file names."
+    (let* ((file-list
+            (seq-filter (lambda (a) (string-match "^[^.][^#].+\\.el$" a)) (directory-files dir-path))))
+      (seq-do (lambda (file-name)
+                (let* ((target-file (concat dir-path "/" file-name))
+                       (compiled-file (concat target-file "c")))
+                  (if (file-exists-p compiled-file)
+                      (delete-file compiled-file))
+                  (byte-compile-file target-file)))
+              file-list)))
+#+END_SRC
+
+***** byte-compile-my-lib関数
+設定ファイルをバイトコンパイルする
+
+#+BEGIN_SRC emacs-lisp
+  (defun byte-compile-my-lib()
+    (cl-flet
+        ((list-files-with-filter
+          (lambda (dir-name arg-filter-func)
+            (seq-filter
+             (lambda (file-path)
+               (file-exists-p file-path))
+             (seq-map
+              (lambda (name)
+                (concat dir-name "/" name))
+              (seq-filter arg-filter-func (directory-files dir-name)))))))
+      (dolist (dir-path '("~/.emacs.d" "~/.emacs.d/lib-src"))
+        (byte-compile-file-in-dir dir-path)
+        (dolist (file-path (list-files-with-filter dir-path (lambda (name) (string-suffix-p ".elc" name))))
+          (move-file file-path "~/.emacs.d/lib")))))
+#+END_SRC
+
+***** exit関数
+設定ファイルをバイトコンパイルし、Emacsを終了する。
+
+#+BEGIN_SRC emacs-lisp
+  (defun exit ()
+    "This command is used to exit emacs for preventing unwanted exit by some key combination."
+    (interactive)
+    (byte-compile-my-lib)
+    (save-buffers-kill-terminal))
+#+END_SRC
+
+*** プログラミング言語対応関数
+**** my-prettify-c-block-comment関数 - 整形されたCコメントを挿入
 改行時にコメントの記号を補完する。
 [[https://emacs.stackexchange.com/questions/14563/how-to-automatically-create-neat-c-comment-blocks-while-typing][参照URL]]
 
@@ -442,12 +509,29 @@ Testing offset comment block ..
 
 With cursor after the semicolon, typing: /* M-j Test offset comment gives the below. The ▮ indicates the cursor location at the end of typing.
 
-*** 無名のバッファを作成する
+*** シェル系関数
+**** mvn関数
+シェルコマンドのmvnを実行する
+
 #+BEGIN_SRC emacs-lisp
-(defun generate-buffer ()
-  (interactive)
-  (switch-to-buffer (make-temp-name "New Buffer ")))
+(defun mvn (arg-list)
+  (shell-command (append (cons "mvn" arg-list))))
 #+END_SRC
+
+**** igrep関数 - 対話的にgrepを実行
+grepコマンドを対話的に実行する関数。
+
+#+BEGIN_SRC emacs-lisp
+  (defun igrep(word directory)
+    (interactive "s検索する言葉: \ns検索するディレクトリ: ")
+    (grep (string-join nil
+                       nil
+                       " "
+                       `("grep --color -nH --null -r -e"
+                         ,(prin1-to-string word)
+                         ,(prin1-to-string (expand-file-name directory))))))
+#+END_SRC
+
 *** 使ってない関数
 ずいぶん前に作ったのや、必要がなくなった関数を書いとく。
 **** send-this-buffer-to-server関数
@@ -509,7 +593,8 @@ tanakapoint (チュートリアルサイト用)
 #+END_SRC
 
 ** カスタムコマンド custom-commands
-*** 1文字消す (バックスペース)
+*** テキスト編集コマンド
+**** 1文字消す (バックスペース) C-h
 #+BEGIN_SRC emacs-lisp
   (defun delete-backward-1-char ()
     (interactive)
@@ -517,23 +602,15 @@ tanakapoint (チュートリアルサイト用)
 
   (global-set-key (kbd "C-h") 'delete-backward-1-char)
 #+END_SRC
-*** 次のウィンドウに移動
+**** 前の単語を削除する M-h
 #+BEGIN_SRC emacs-lisp
-  (defun move-to-next-window ()
+  (defun delete-backward-1-word ()
     (interactive)
-    (other-window 1))
-
-  (global-set-key (kbd "C-}") 'move-to-next-window)
+    (delete-backward-word))
+  
+  (global-set-key (kbd "M-h") 'delete-backward-1-word)
 #+END_SRC
-*** 前のウィンドウに移動
-#+BEGIN_SRC emacs-lisp
-  (defun move-to-previous-window ()
-    (interactive)
-    (other-window -1))
-
-  (global-set-key (kbd "C-{") 'move-to-previous-window)
-#+END_SRC
-*** 今の行を削除する
+**** 今の行を削除する C-k
 #+BEGIN_SRC emacs-lisp
   (defun kill-current-line ()
     (interactive)
@@ -543,104 +620,15 @@ tanakapoint (チュートリアルサイト用)
 
   (global-set-key (kbd "C-k") 'kill-current-line)
 #+END_SRC
-*** 指定の行数分、上にスクロールする
-#+BEGIN_SRC emacs-lisp
-  (defun scroll-up-an-amount ()
-    (interactive)
-    (scroll-up scroll-amount-at-once))
-
-  (global-set-key (kbd "M-n") 'scroll-up-an-amount)
-  (global-set-key (kbd "<mouse-5>") 'scroll-up-an-amount)
-#+END_SRC
-*** 指定の行数分、下にスクロールする
-#+BEGIN_SRC emacs-lisp
-  (defun scroll-down-an-amount ()
-    (interactive)
-    (scroll-down scroll-amount-at-once))
-
-  (global-set-key (kbd "M-p") 'scroll-down-an-amount)
-  (global-set-key (kbd "<mouse-4>") 'scroll-down-an-amount)
-#+END_SRC
-*** 5行下にカーソルを移動する
-#+BEGIN_SRC emacs-lisp
-  (defun move-5-lines-down ()
-    (interactive)
-    (next-line 5))
-
-  (global-set-key (kbd "C-c C-n") 'move-5-lines-down)
-#+END_SRC
-*** 5行上にカーソルを移動する
-#+BEGIN_SRC emacs-lisp
-  (defun move-5-lines-up ()
-    (interactive)
-    (previous-line 5))
-  
-  (global-set-key (kbd "C-c C-p") 'move-5-lines-up)
-#+END_SRC
-*** 次の段落に移動する
-#+BEGIN_SRC emacs-lisp
-  (defun move-forward-1-paragraph ()
-    (interactive)
-    (forward-paragraph 1)
-    (skip-chars-forward "[:blank:][:cntrl:]"))
-
-  (global-set-key (kbd "C-S-n") 'move-forward-1-paragraph)
-  (global-set-key (kbd "M-]") 'forward-paragraph)
-#+END_SRC
-*** 前の段落に移動する
-#+BEGIN_SRC emacs-lisp
-  (defun move-backward-1-paragraph ()
-    (interactive)
-    (let ((save-point (point)))
-       (backward-paragraph 1)
-       (skip-chars-forward "[:blank:][:cntrl:]")
-       (when (= (point) save-point)
-         (backward-paragraph 2)
-         (skip-chars-forward "[:blank:][:cntrl:]"))))
-
-  (global-set-key (kbd "C-S-p") 'move-backward-1-paragraph)
-  (global-set-key (kbd "M-[") 'backward-paragraph)
-#+END_SRC
-*** 前の単語を削除する
-#+BEGIN_SRC emacs-lisp
-  (defun delete-backward-1-word ()
-    (interactive)
-    (delete-backward-word))
-  
-  (global-set-key (kbd "M-h") 'delete-backward-1-word)
-#+END_SRC
-*** 1つの単語分、先に進む
-#+BEGIN_SRC emacs-lisp
-  (defun skip-word-forward ()
-    (interactive)
-    (let ((save-point (point)))
-      (skip-chars-forward "[:blank:][:cntrl:][:punct:]")
-      (when (= (point) save-point)
-        (forward-word)
-        (skip-chars-forward "[:blank:][:cntrl:][:punct:]"))))
-  
-  (global-set-key (kbd "M-f") 'skip-word-forward)
-#+END_SRC
-*** 文字列を置換する
+**** 文字列を置換する C-c f
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c f") 'replace-string)
 #+END_SRC
-*** 文字列を正規表現で置換する
+**** 文字列を正規表現で置換する C-c r
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c r") 'replace-regexp)
 #+END_SRC
-*** SKKモード
-#+BEGIN_SRC emacs-lisp
-  (defun skk-insert-str-interactive ()
-    (interactive)
-    (skk-insert-str (buffer-name)))
-
-  (global-set-key (kbd "C-x C-j") 'skk-mode)
-  (global-set-key (kbd "C-x j") 'skk-auto-fill-mode)
-  (global-set-key (kbd "C-x t") 'skk-tutorial)
-  (global-set-key (kbd "C-c C-c f") 'skk-insert-str-interactive)
-#+END_SRC
-*** 後ろの行を結合する
+**** 後ろの行を結合する M-j
 #+BEGIN_SRC emacs-lisp
   (defun join-next-line ()  
     (interactive)
@@ -650,36 +638,7 @@ tanakapoint (チュートリアルサイト用)
 
   (global-set-key (kbd "M-j") 'join-next-line)
 #+END_SRC
-*** 指定の行に移動する
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-:") 'goto-line)
-#+END_SRC
-*** ファイルを保存した状態に戻す
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-c C-r") 'revert-buffer)
-#+END_SRC
-*** 絵文字を挿入する
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-c C-r") 'revert-buffer)
-#+END_SRC
-*** 組み込みのIMEを無効化する
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-\\") nil)
-  (global-set-key (kbd "C-_") nil)
-#+END_SRC
-*** 入力メソッドを切り換える
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "<zenkaku-hankaku>") 'toggle-input-method)
-#+END_SRC
-*** 新しいフレームを作成する
-#+BEGIN_SRC emacs-lisp
-  (defun create-new-frame-interactive()
-    (interactive)
-    (create-new-frame))
-  
-  (global-set-key (kbd "C-x 5 2") 'create-new-frame-interactive)
-#+END_SRC
-*** バッファ名をバッファに挿入する
+**** バッファ名をバッファに挿入する C-c n
 #+BEGIN_SRC emacs-lisp
   (defun put-buffer-name()
     (interactive)
@@ -693,6 +652,140 @@ tanakapoint (チュートリアルサイト用)
   
   (global-set-key (kbd "C-c n") 'put-buffer-name)
 #+END_SRC
+**** 絵文字を挿入する C-c C-r
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-c C-r") 'revert-buffer)
+#+END_SRC
+**** ファイルを保存した状態に戻す
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-c C-r") 'revert-buffer)
+#+END_SRC
+*** カーソル移動コマンド
+**** 次の単語の先頭に進む M-f
+#+BEGIN_SRC emacs-lisp
+  (defun skip-word-forward ()
+    (interactive)
+    (let ((save-point (point)))
+      (skip-chars-forward "[:blank:][:cntrl:][:punct:]")
+      (when (= (point) save-point)
+        (forward-word)
+        (skip-chars-forward "[:blank:][:cntrl:][:punct:]"))))
+  
+  (global-set-key (kbd "M-f") 'skip-word-forward)
+#+END_SRC
+**** 単語の最後に進む M-e
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "M-e") 'forward-word)
+#+END_SRC
+
+**** 5行下にカーソルを移動する C-c C-n
+#+BEGIN_SRC emacs-lisp
+  (defun move-5-lines-down ()
+    (interactive)
+    (next-line 5))
+
+  (global-set-key (kbd "C-c C-n") 'move-5-lines-down)
+#+END_SRC
+**** 5行上にカーソルを移動する C-c C-p
+#+BEGIN_SRC emacs-lisp
+  (defun move-5-lines-up ()
+    (interactive)
+    (previous-line 5))
+  
+  (global-set-key (kbd "C-c C-p") 'move-5-lines-up)
+#+END_SRC
+**** 次のウィンドウに移動 C-}
+#+BEGIN_SRC emacs-lisp
+  (defun move-to-next-window ()
+    (interactive)
+    (other-window 1))
+
+  (global-set-key (kbd "C-}") 'move-to-next-window)
+#+END_SRC
+**** 前のウィンドウに移動 C-{
+#+BEGIN_SRC emacs-lisp
+  (defun move-to-previous-window ()
+    (interactive)
+    (other-window -1))
+
+  (global-set-key (kbd "C-{") 'move-to-previous-window)
+#+END_SRC
+**** 前の段落に移動する C-S-p
+#+BEGIN_SRC emacs-lisp
+  (defun move-backward-1-paragraph ()
+    (interactive)
+    (let ((save-point (point)))
+       (backward-paragraph 1)
+       (skip-chars-forward "[:blank:][:cntrl:]")
+       (when (= (point) save-point)
+         (backward-paragraph 2)
+         (skip-chars-forward "[:blank:][:cntrl:]"))))
+
+  (global-set-key (kbd "C-S-p") 'move-backward-1-paragraph)
+  (global-set-key (kbd "M-[") 'backward-paragraph)
+#+END_SRC
+**** 次の段落に移動する C-S-n
+#+BEGIN_SRC emacs-lisp
+  (defun move-forward-1-paragraph ()
+    (interactive)
+    (forward-paragraph 1)
+    (skip-chars-forward "[:blank:][:cntrl:]"))
+
+  (global-set-key (kbd "C-S-n") 'move-forward-1-paragraph)
+  (global-set-key (kbd "M-]") 'forward-paragraph)
+#+END_SRC
+**** 指定の行に移動する C-:
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-:") 'goto-line)
+#+END_SRC
+*** モード設定コマンド
+**** SKKモード
+#+BEGIN_SRC emacs-lisp
+  (defun skk-insert-str-interactive ()
+    (interactive)
+    (skk-insert-str (buffer-name)))
+
+  (global-set-key (kbd "C-x C-j") 'skk-mode)
+  (global-set-key (kbd "C-x j") 'skk-auto-fill-mode)
+  (global-set-key (kbd "C-x t") 'skk-tutorial)
+  (global-set-key (kbd "C-c C-c f") 'skk-insert-str-interactive)
+#+END_SRC
+**** 入力メソッドを切り換える
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "<zenkaku-hankaku>") 'toggle-input-method)
+#+END_SRC
+**** 組み込みのIMEを無効化する
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-\\") nil)
+  (global-set-key (kbd "C-_") nil)
+#+END_SRC
+*** 表示コントロールコマンド
+**** 指定の行数分、上にスクロールする
+#+BEGIN_SRC emacs-lisp
+  (defun scroll-up-an-amount ()
+    (interactive)
+    (scroll-up scroll-amount-at-once))
+
+  (global-set-key (kbd "M-n") 'scroll-up-an-amount)
+  (global-set-key (kbd "<mouse-5>") 'scroll-up-an-amount)
+#+END_SRC
+**** 指定の行数分、下にスクロールする
+#+BEGIN_SRC emacs-lisp
+  (defun scroll-down-an-amount ()
+    (interactive)
+    (scroll-down scroll-amount-at-once))
+
+  (global-set-key (kbd "M-p") 'scroll-down-an-amount)
+  (global-set-key (kbd "<mouse-4>") 'scroll-down-an-amount)
+#+END_SRC
+**** 新しいフレームを作成する
+#+BEGIN_SRC emacs-lisp
+  (defun create-new-frame-interactive()
+    (interactive)
+    (create-new-frame))
+  
+  (global-set-key (kbd "C-x 5 2") 'create-new-frame-interactive)
+#+END_SRC
 *** その他、よくわからないキーバインドがある
 #+BEGIN_SRC emacs-lisp
   ;;(global-set-key (kbd "C-x C-z") nil)
@@ -703,10 +796,21 @@ recentlyをインストールする必要がある
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-x C-r") 'recently-show)
 #+END_SRC
-*** 1単語分、先に進む
+*** 保存する時に、更新時刻が勝手に変更されて保存できない場合への対処として、強制保存をする
+
 #+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "M-e") 'forward-word)
+
+  (defun my-reset-file-modtime ()
+    "保存後にファイルのmodtimeをリセットして、Emacsに『変わってない』と思わせる。"
+    (when buffer-file-name
+      (clear-visited-file-modtime)))
+
+  (add-hook 'after-save-hook 'my-reset-file-modtime)
+
 #+END_SRC
+
+#+RESULTS:
+
 ** カスタムマクロ custom-macros
 *** ifuncマクロ - 対話的lambdaを生成する
 マクロを定義する。cmdは即席のコマンドを定義する。キーバインド設定で使う。
@@ -720,595 +824,6 @@ recentlyをインストールする必要がある
 #+END_SRC
 
 ** カスタム変数 custom-variables
-*** 色の名前
-洋色大辞典というサイトからカラーコードをパクってきました。
-色名が使えて便利なので。
-
-“世界の伝統色の名前とカラーコードが一目でわかるWEB色見本
- 世界の伝統色 洋色大辞典 - Traditional Colors of World
- カタカナ表記される慣用色285色の色名と16進数”
-
-URL: https://www.colordic.org/y
-
-命名規則…洋色大辞典に記載された色の名前の頭に "color-" をつけ、
-          単語間のスペースを"-" (アンダースコア) に変換する。
-
-使い方…洋色大辞典 (https://www.colordic.org/y) を見て使いたい色を見付け、
-        上の命名規則によって決められた色名の変数をemacs-lispコードで使用する。
-
-#+BEGIN_SRC emacs-lisp
-  ;;コーラルレッド
-  (setq color-coral-red "#ef857d")
-  ;;サンシャインイエロー
-  (setq color-sunshine-yellow "#ffedab")
-  ;;アイスグリーン
-  (setq color-ice-green "#a3d6cc")
-  ;;ウイスタリア
-  (setq color-wistaria "#8d93c8")
-  ;;ピンクアーモンド
-  (setq color-pink-almond "#e3acae")
-  ;;ポピーレッド
-  (setq color-poppy-red "#ea5550")
-  ;;クリームイエロー
-  (setq color-cream-yellow "#fff3b8")
-  ;;ターコイズグリーン
-  (setq color-turquoise-green "#00947a")
-  ;;ブルーラベンダー
-  (setq color-blue-lavender "#a4a8d4")
-  ;;ローズダスト
-  (setq color-rose-dust "#e6c0c0")
-  ;;レッド
-  (setq color-red "#ea5550")
-  ;;ネープルスイエロー
-  (setq color-naples-yellow "#fdd35c")
-  ;;シーグリーン
-  (setq color-sea-green "#00ac97")
-  ;;パンジー
-  (setq color-pannsy "#4d4398")
-  ;;ホワイト
-  (setq color-white "#ffffff")
-  ;;トマトレッド
-  (setq color-tomato-red "#ea5549")
-  ;;トパーズ
-  (setq color-topaz "#e9bc00")
-  ;;ペパーミントグリーン
-  (setq color-peppermint-green "#00ac9a")
-  ;;バイオレット
-  (setq color-violet "#5a4498")
-  ;;スノーホワイト
-  (setq color-snow-white "#fafdff")
-  ;;バーミリオン
-  (setq color-vermilion "#ea553a")
-  ;;クロムイエロー
-  (setq color-chrome-yellow "#fcc800")
-  ;;ピーコックグリーン
-  (setq color-peacock-green "#00a497")
-  ;;ヘリオトロープ
-  (setq color-heliotrope "#9079b6")
-  ;;ピンクホワイト
-  (setq color-pink-white "#fef9fb")
-  ;;スカーレット
-  (setq color-scarlet "#ea5532")
-  ;;クリーム
-  (setq color-cream "#e3d7a3")
-  ;;ナイルブルー
-  (setq color-nile-blue "#2cb4ad")
-  ;;ディープロイヤルパープル
-  (setq color-deep-royal-purple "#47266e")
-  ;;ミルキーホワイト
-  (setq color-milky-white "#fffff9")
-  ;;キャロットオレンジ
-  (setq color-carrot-orange "#ed6d35")
-  ;;ストロー
-  (setq color-straw "#ece093")
-  ;;サックスブルー
-  (setq color-saxe-blue "#418b89")
-  ;;グレープ
-  (setq color-grape "#56256e")
-  ;;アンバーホワイト
-  (setq color-amber-white "#fff9f5")
-  ;;チャイニーズレッド
-  (setq color-chinese-red "#ed6d46")
-  ;;ジャスミンイエロー
-  (setq color-jasmine-yellow "#edde7b")
-  ;;スレートグリーン
-  (setq color-slate-green "#3c7170")
-  ;;モーブ
-  (setq color-mauve "#915da3")
-  ;;ラベンダーアイス
-  (setq color-lavender-ice "#f7f6fb")
-  ;;テラコッタ
-  (setq color-terracotta "#bd6856")
-  ;;アンティックゴールド
-  (setq color-antique-gold "#c1ab05")
-  ;;テールグリーン
-  (setq color-teal-green "#006a6c")
-  ;;アイリス
-  (setq color-iris "#c7a5cc")
-  ;;パールホワイト
-  (setq color-pearl-white "#f7f6f5")
-  ;;ココアブラウン
-  (setq color-cocoa-brown "#98605e")
-  ;;オリーブ
-  (setq color-olive "#72640c")
-  ;;アクアグリーン
-  (setq color-aqua-green "#88bfbf")
-  ;;ライラック
-  (setq color-lilac "#d1bada")
-  ;;アイボリー
-  (setq color-ivory "#f8f4e6")
-  ;;マホガニー
-  (setq color-mahogany "#6b3f31")
-  ;;オリーブドラブ
-  (setq color-olive-drab "#665a1a")
-  ;;アクアマリン
-  (setq color-aquamarine "#67b5b7")
-  ;;ラベンダー
-  (setq color-lavender "#cab8d9")
-  ;;パウダーピンク
-  (setq color-powder-pink "#f5ecf4")
-  ;;チョコレート
-  (setq color-chocolate "#6c3524")
-  ;;ジョンブリアン
-  (setq color-jaune-brillant "#ffdc00")
-  ;;ピーコックブルー
-  (setq color-peacock-blue "#009e9f")
-  ;;クロッカス
-  (setq color-crocus "#b79fcb")
-  ;;シルバーホワイト
-  (setq color-silver-white "#efefef")
-  ;;マルーン
-  (setq color-marron "#6a1917")
-  ;;イエロー
-  (setq color-yellow "#ffdc00")
-  ;;ターコイズ
-  (setq color-turquoise "#009b9f")
-  ;;ラベンダーモーブ
-  (setq color-lavender-mauve "#a688bd")
-  ;;フロスティグレイ
-  (setq color-frosty-gray "#e8ece9")
-  ;;セピア
-  (setq color-sepia "#622d18")
-  ;;シトラス
-  (setq color-citrus "#eddc44")
-  ;;カプリブルー
-  (setq color-capri-blue "#00a3a7")
-  ;;パープル
-  (setq color-purple "#9b72b0")
-  ;;シルバーピンク
-  (setq color-silver-pink "#eeeaec")
-  ;;コーヒー色
-  (setq color-coffee "#7b5544")
-  ;;ライムライト
-  (setq color-limelight "#fff799")
-  ;;ケンブリッジブルー
-  (setq color-cambridge-blue "#25b7c0")
-  ;;ロイヤルパープル
-  (setq color-royal-purple "#7f1184")
-  ;;ベージュカメオ
-  (setq color-beige-cameo "#eee9e6")
-  ;;ブラウン
-  (setq color-brown "#8f6552")
-  ;;カナリヤ
-  (setq color-canary-yellow "#fff462")
-  ;;ターコイズブルー
-  (setq color-turquoise-blue "#00afcc")
-  ;;レーズン
-  (setq color-raisin "#6b395f")
-  ;;エクリュ
-  (setq color-ecru "#eee7e0")
-  ;;バーントシェンナ
-  (setq color-burnt-sienna "#bb5535")
-  ;;ミモザ
-  (setq color-mimosa "#fff462")
-  ;;ホライズンブルー
-  (setq color-horizon-blue "#82cddd")
-  ;;プラム
-  (setq color-plum "#6c2463")
-  ;;ピンクベージュ
-  (setq color-pink-beige "#ede4e1")
-  ;;アンバーローズ
-  (setq color-amber-rose "#e6bfb2")
-  ;;レモンイエロー
-  (setq color-lemon-yellow "#fff352")
-  ;;サマーシャワー
-  (setq color-summer-shower "#a1d8e2")
-  ;;ラズベリー
-  (setq color-raspberry "#841a75")
-  ;;フロスティホワイト
-  (setq color-frosty-white "#e6eae6")
-  ;;ベージュローゼ
-  (setq color-beige-rose "#e8d3ca")
-  ;;メロンイエロー
-  (setq color-melon-yellow "#e0de94")
-  ;;ホリゾンブルー
-  (setq color-horizon-blue "#a1d8e6")
-  ;;フランボワーズ
-  (setq color-framboise "#9a0d7c")
-  ;;オイスターホワイト
-  (setq color-oyster-white "#eae8e1")
-  ;;サーモンピンク
-  (setq color-salmon-pink "#f3a68c")
-  ;;シャルトルーズイエロー
-  (setq color-chartreuse-yellow "#e3e548")
-  ;;セルリアンブルー
-  (setq color-cerulean-blue "#008db7")
-  ;;ダリアパープル
-  (setq color-dahlia-purple "#a50082")
-  ;;ウィステリアミスト
-  (setq color-wisteria-mist "#d3d6dd")
-  ;;サハラ
-  (setq color-sahara "#e29676")
-  ;;ライムイエロー
-  (setq color-lime-yellow "#eaeea2")
-  ;;ダックブルー
-  (setq color-duck-blue "#007199")
-  ;;オーキッドパープル
-  (setq color-orchid-purple "#af0082")
-  ;;クラウド
-  (setq color-cloud "#d4d9df")
-  ;;アッシュローズ
-  (setq color-ash-rose "#e6bfab")
-  ;;ライムグリーン
-  (setq color-lime-green "#e6eb94")
-  ;;マリンブルー
-  (setq color-marine-blue "#006888")
-  ;;ラズベリーレッド
-  (setq color-raspberry-red "#9f166a")
-  ;;ムーングレイ
-  (setq color-moon-gray "#d4d9dc")
-  ;;シェルピンク
-  (setq color-shell-pink "#fbdac8")
-  ;;シャトルーズグリーン
-  (setq color-chartreuse-green "#d9e367")
-  ;;マドンナブルー
-  (setq color-madonna-blue "#00608d")
-  ;;オーキッド
-  (setq color-orchid "#d9aacd")
-  ;;チャイナクレイ
-  (setq color-china-clay "#d4dcd3")
-  ;;ベビーピンク
-  (setq color-baby-pink "#fdede4")
-  ;;レタスグリーン
-  (setq color-lettuce-green "#d1de4c")
-  ;;エジプシャンブルー
-  (setq color-egyptian-blue "#0073a8")
-  ;;リラ
-  (setq color-lilla "#e0b5d3")
-  ;;サンドベージュ
-  (setq color-sand-beige "#dcd6d2")
-  ;;ネールピンク
-  (setq color-nail-pink "#fce4d6")
-  ;;オリーブグリーン
-  (setq color-olive-green "#5f6527")
-  ;;ベビーブルー
-  (setq color-baby-blue "#bbe2f1")
-  ;;ローズタンドル
-  (setq color-rose-tendre "#e6afcf")
-  ;;オーキッドミスト
-  (setq color-orchid-mist "#d3d3d8")
-  ;;ローシェンナ
-  (setq color-raw-sienna "#e17b34")
-  ;;モスグリーン
-  (setq color-moss-green "#777e41")
-  ;;スカイブルー
-  (setq color-sky-blue "#a0d8ef")
-  ;;オーキッドピンク
-  (setq color-orchid-pink "#da81b2")
-  ;;リードグレイ
-  (setq color-reed-gray "#d4d9d6")
-  ;;キャラメル
-  (setq color-caramel "#bc611e")
-  ;;グラスグリーン
-  (setq color-grass-green "#7b8d42")
-  ;;シャドウブルー
-  (setq color-shadow-blue "#719bad")
-  ;;シクラメンピンク
-  (setq color-cyclamen-pink "#d04f97")
-  ;;スカイグレイ
-  (setq color-sky-gray "#cbd0d3")
-  ;;サンセット
-  (setq color-sunset "#f6b483")
-  ;;スプリンググリーン
-  (setq color-spring-green "#9cbb1c")
-  ;;シアン
-  (setq color-cyan "#00a1e9")
-  ;;マゼンタ
-  (setq color-magenta "#e4007f")
-  ;;ラベンダーグレイ
-  (setq color-lavender-gray "#bcbace")
-  ;;シナモン
-  (setq color-cinnamon "#be8f68")
-  ;;リーフグリーン
-  (setq color-leaf-green "#9fc24d")
-  ;;ヨットブルー
-  (setq color-yacht-blue "#409ecc")
-  ;;ブーゲンビリア
-  (setq color-bougainvillaea "#e62f8b")
-  ;;シルバー
-  (setq color-silver "#c9caca")
-  ;;タン
-  (setq color-tan "#bf783e")
-  ;;ホワイトリリー
-  (setq color-white-lily "#f0f6da")
-  ;;チョークブルー
-  (setq color-chalk-blue "#68a9cf")
-  ;;ルビー
-  (setq color-ruby "#c70067")
-  ;;パールグレイ
-  (setq color-pearl-gray "#c9c9c4")
-  ;;シャンパン
-  (setq color-champagne "#e9dacb")
-  ;;アスパラガスグリーン
-  (setq color-asparagus-green "#dbebc4")
-  ;;ピジョンブルー
-  (setq color-pigeon-blue "#88b5d3")
-  ;;クラレット
-  (setq color-claret "#941f57")
-  ;;サンドグレイ
-  (setq color-sand-gray "#c9c9c2")
-  ;;ピーチ
-  (setq color-peach "#fbd8b5")
-  ;;シトロングリーン
-  (setq color-citron-green "#618e34")
-  ;;スモークブルー
-  (setq color-smoke-blue "#a4c1d7")
-  ;;アザレ
-  (setq color-azalee "#d83473")
-  ;;マーブルグレイ
-  (setq color-marble-gray "#c0c5c2")
-  ;;カフェオレ
-  (setq color-cafe-au-lait "#946c45")
-  ;;メドウグリーン
-  (setq color-meadow-green "#65ab31")
-  ;;フロスティブルー
-  (setq color-frosty-blue "#bbdbf3")
-  ;;コスモス
-  (setq color-cosmos "#dc6b9a")
-  ;;オパールグレイ
-  (setq color-opal-gray "#bfbec5")
-  ;;オレンジ
-  (setq color-orange "#ee7800")
-  ;;アップルグリーン
-  (setq color-apple-green "#a7d28d")
-  ;;ブルーアシード
-  (setq color-bleu-acide "#006eb0")
-  ;;ロータスピンク
-  (setq color-lotus-pink "#de82a7")
-  ;;フレンチグレイ
-  (setq color-french-gray "#8da0b6")
-  ;;アプリコット
-  (setq color-apricot "#f7b977")
-  ;;アイビーグリーン
-  (setq color-ivy-green "#578a3d")
-  ;;コバルトブルー
-  (setq color-cobalt-blue "#0068b7")
-  ;;オールドオーキッド
-  (setq color-old-orchid "#e3adc1")
-  ;;ミスト
-  (setq color-mist "#b4aeb1")
-  ;;アンバー
-  (setq color-amber "#c2894b")
-  ;;スピナッチグリーン
-  (setq color-spinach-green "#417038")
-  ;;サファイアブルー
-  (setq color-sapphire-blue "#0068b7")
-  ;;ローズミスト
-  (setq color-rose-mist "#debecc")
-  ;;アッシュブロンド
-  (setq color-ash-blond "#b5b5ae")
-  ;;ブロンズ
-  (setq color-bronze "#ac6b25")
-  ;;カクタス
-  (setq color-cactus "#387d39")
-  ;;スペクトラムブルー
-  (setq color-spectrum-blue "#0075c2")
-  ;;ローズドラジェ
-  (setq color-rose-dragee "#e5c1cd")
-  ;;フォッグ
-  (setq color-fog "#abb1b5")
-  ;;ヴァニラ
-  (setq color-vanilla "#e8c59c")
-  ;;スカイグリーン
-  (setq color-sky-green "#bee0c2")
-  ;;ブルー
-  (setq color-blue "#0075c2")
-  ;;チェリーピンク
-  (setq color-cherry-pink "#eb6ea0")
-  ;;ベージュグレイ
-  (setq color-beige-gray "#b4ada9")
-  ;;コルク
-  (setq color-cork "#c49a6a")
-  ;;スペアミント
-  (setq color-spearmint "#79c06e")
-  ;;ゼニスブルー
-  (setq color-zenith-blue "#4496d3")
-  ;;オペラ
-  (setq color-opera "#e95388")
-  ;;シルバーグレイ
-  (setq color-silver-gray "#afafb0")
-  ;;バーントアンバー
-  (setq color-burnt-umber "#6f5436")
-  ;;ミントグリーン
-  (setq color-mint-green "#89c997")
-  ;;ヘブンリーブルー
-  (setq color-heavenly-blue "#68a4d9")
-  ;;ローズレッド
-  (setq color-rose-red "#ea618e")
-  ;;ストームグレイ
-  (setq color-storm-gray "#aaaab0")
-  ;;ローアンバー
-  (setq color-raw-umber "#866629")
-  ;;パロットグリーン
-  (setq color-parrot-green "#37a34a")
-  ;;オーキッドグレイ
-  (setq color-orchid-gray "#bcc7d7")
-  ;;オールドライラック
-  (setq color-old-lilac "#b0778c")
-  ;;グリーンフォッグ
-  (setq color-green-fog "#abb1ad")
-  ;;フレッシュ
-  (setq color-flesh "#fad09e")
-  ;;サマーグリーン
-  (setq color-summer-green "#009944")
-  ;;パウダーブルー
-  (setq color-powder-blue "#bccddb")
-  ;;ココア色
-  (setq color-cocoa "#6e4a55")
-  ;;アッシュグレイ
-  (setq color-ash-gray "#9fa09e")
-  ;;ゴールデンイエロー
-  (setq color-golden-yellow "#f6ae54")
-  ;;オパールグリーン
-  (setq color-opal-green "#bee0ce")
-  ;;ライトブルー
-  (setq color-light-blue "#b2cbe4")
-  ;;ワインレッド
-  (setq color-wine-red "#b33e5c")
-  ;;ローズグレイ
-  (setq color-rose-gray "#9d8e87")
-  ;;マンダリンオレンジ
-  (setq color-mandarin-orange "#f3981d")
-  ;;スプレイグリーン
-  (setq color-spray-green "#a4d5bd")
-  ;;ベイビーブルー
-  (setq color-baby-blue "#a2c2e6")
-  ;;ガーネット
-  (setq color-garnet "#942343")
-  ;;エレファントスキン
-  (setq color-elephant-skin "#9f9f98")
-  ;;マリーゴールド
-  (setq color-marigold "#f39800")
-  ;;ボトルグリーン
-  (setq color-bottle-green "#004d25")
-  ;;デイドリーム
-  (setq color-day-dream "#a3b9e0")
-  ;;コチニールレッド
-  (setq color-cochineal-red "#c82c55")
-  ;;バトルシップグレイ
-  (setq color-battleship-gray "#898989")
-  ;;エクルベージュ
-  (setq color-ecru-beige "#f6e5cc")
-  ;;コバルトグリーン
-  (setq color-cobalt-green "#3cb37a")
-  ;;サルビアブルー
-  (setq color-salvia-blue "#94adda")
-  ;;ストロベリー
-  (setq color-strawberry "#e73562")
-  ;;ストーングレイ
-  (setq color-stone-gray "#898880")
-  ;;オイスター
-  (setq color-oyster "#eae1cf")
-  ;;エバーグリーン
-  (setq color-evergreen "#00984f")
-  ;;ヒヤシンスブルー
-  (setq color-hyacinth-blue "#7a99cf")
-  ;;ルビーレッド
-  (setq color-ruby-red "#e73562")
-  ;;モスグレイ
-  (setq color-moss-gray "#7e837f")
-  ;;オーカー
-  (setq color-ochre "#ba8b40")
-  ;;マラカイトグリーン
-  (setq color-malachite-green "#009854")
-  ;;ヒヤシンス
-  (setq color-hyacinth "#6c9bd2")
-  ;;カーマイン
-  (setq color-carmine "#d70035")
-  ;;ダブグレイ
-  (setq color-dove-gray "#7d7b83")
-  ;;カーキー
-  (setq color-khaki "#c5a05a")
-  ;;グリーン
-  (setq color-green "#00a960")
-  ;;ミッドナイトブルー
-  (setq color-midnight-blue "#001e43")
-  ;;シグナルレッド
-  (setq color-signal-red "#e8383d")
-  ;;グレイ
-  (setq color-gray "#7d7d7d")
-  ;;バフ
-  (setq color-buff "#caac71")
-  ;;エメラルドグリーン
-  (setq color-emerald-green "#00a968")
-  ;;ネービーブルー
-  (setq color-navy-blue "#202f55")
-  ;;バーガンディー
-  (setq color-burgundy "#6c2735")
-  ;;スチールグレイ
-  (setq color-steel-gray "#736d71")
-  ;;サフランイエロー
-  (setq color-saffron-yellow "#fac559")
-  ;;フォレストグリーン
-  (setq color-forest-green "#288c66")
-  ;;プルシャンブルー
-  (setq color-prussian-blue "#192f60")
-  ;;ボルドー
-  (setq color-bordeaux "#6c272d")
-  ;;アイビーグレイ
-  (setq color-ivy-gray "#666c67")
-  ;;パンプキン
-  (setq color-pumpkin "#e5a323")
-  ;;ビリジアン
-  (setq color-viridian "#00885a")
-  ;;アイアンブルー
-  (setq color-iron-blue "#192f60")
-  ;;カメリア
-  (setq color-camellia "#da536e")
-  ;;スレートグレイ
-  (setq color-slate-gray "#626063")
-  ;;イエローオーカー
-  (setq color-yellow-ocher "#c4972f")
-  ;;ホーリーグリーン
-  (setq color-holly-green "#006948")
-  ;;インディゴ
-  (setq color-indigo "#043c78")
-  ;;ローズ
-  (setq color-rose "#e95464")
-  ;;グラファイト
-  (setq color-graphite "#594e52")
-  ;;ブロンド
-  (setq color-blond "#f2d58a")
-  ;;ビリヤードグリーン
-  (setq color-billiard-green "#005c42")
-  ;;インクブルー
-  (setq color-ink-blue "#003f8e")
-  ;;ローズピンク
-  (setq color-rose-pink "#f19ca7")
-  ;;チャコールグレイ
-  (setq color-charcoal-gray "#4e454a")
-  ;;ベージュ
-  (setq color-beige "#eedcb3")
-  ;;クロムグリーン
-  (setq color-chrome-green "#00533f")
-  ;;オリエンタルブルー
-  (setq color-oriental-blue "#26499d")
-  ;;ピンク
-  (setq color-pink "#f5b2b2")
-  ;;トープ
-  (setq color-taupe "#504946")
-  ;;ビスケット
-  (setq color-biscuit "#ead7a4")
-  ;;アンティークグリーン
-  (setq color-antique-green "#54917f")
-  ;;ウルトラマリンブルー
-  (setq color-ultramarine-blue "#4753a2")
-  ;;フラミンゴピンク
-  (setq color-flamingo-pink "#f5b2ac")
-  ;;ランプブラック
-  (setq color-lamp-black "#24140e")
-  ;;レグホーン
-  (setq color-leghorn "#ffe9a9")
-  ;;ウォーターグリーン
-  (setq color-water-green "#a5c9c1")
-  ;;ウルトラマリン
-  (setq color-ultramarine "#434da2")
-  ;;オールドローズ
-  (setq color-old-rose "#e29399")
-  ;;ブラック
-  (setq color-black "#000000")
-#+END_SRC
-
 *** スクロール幅の設定
 
 #+BEGIN_SRC emacs-lisp
@@ -1321,7 +836,7 @@ URL: https://www.colordic.org/y
 
 #+BEGIN_SRC emacs-lisp
 ;; デフォルトのディレクトリを設定する
-(setq default-directory "C:/Users/aharo/")
+;;(setq default-directory "C:/Users/aharo/")
 #+END_SRC
 
 *** 警告音の停止
@@ -1338,12 +853,27 @@ URL: https://www.colordic.org/y
 #+END_SRC
 
 *** バックアップファイルの無効化
-ファイル保存時にバックアップファイルを作成しない設定"
+ファイル保存時にバックアップファイルを作成しない設定
 
 #+BEGIN_SRC emacs-lisp
-  (setq make-backup-files nil)
-  (setq auto-save-default nil)
-  (setq create-lockfiles nil)
+  ;;(setq make-backup-files nil)
+  ;;(setq auto-save-default nil)
+  ;;(setq create-lockfiles nil)
+#+END_SRC
+
+*** バックアップファイルの設定 (ディレクトリ、履歴管理)
+
+この設定をすると、好きな場所にバックアップファイルを自動で作成・保存できる。
+更に、履歴保存もできる。
+
+#+BEGIN_SRC emacs-lisp
+  (setq backup-by-copying t      ; don't clobber symlinks
+        backup-directory-alist
+        '(("." . "~/.emacs.d/backup-files/"))    ; don't litter my fs tree
+        delete-old-versions t
+        kept-new-versions 6
+        kept-old-versions 2
+        version-control t)       ; use versioned backups
 #+END_SRC
 
 *** インデントをタブに変換しない
@@ -1380,11 +910,40 @@ URL: https://www.colordic.org/y
 ;;(server-mode)
 #+END_SRC
 
+*** ファイル保存時の設定
+
++BEGIN_SRC emacs-lisp
+  ;; 保存時の二重確認を無効にする
+  (setq file-precious-flag nil)
+  ;; リモートファイルのロックを無効にする
+  (setq remote-file-name-inhibit-locks t)
+  ;; セーブメッセージ抑制
+  (setq save-silently t)
+  ;; タイマーによるオートセーブを無効
+  (setq auto-save-timeout 0)
+  ;; 存在しないファイルへの保存確認を無効にする
+  (setq confirm-nonexistent-file-or-buffer nil)
+  ;; 保存時に聞かない
+  (setq buffer-save-without-query t)
+  ;; バッファ保存の警告無効
+  (setq save-some-buffers-action-alist nil)
+
+  (setq revert-without-query '(".*"))
+
+  (setq require-final-newline nil)
+
+  ;; ファイルが外部で更新されたかチェックしない
+  (setq auto-revert-verbose nil)
+  (setq auto-revert-interval 10)
+  ;; ファイルが更新されても自動で読み直す
+  (global-auto-revert-mode t)
+#+END_SRC
+
 ** カスタム・モード custom-modes
 カスタム・モードの作り方は難しいんだけど、ジェネリック・モードならすぐに作れた。
 それを利用してValaのモードを作ってみた。
 
-*** Valaモード
+*** Valaモード (使わない)
 tt-vala-modeを作成する。
 
 tt-vala-mode.el --- Major mode for editing Vala code
@@ -1401,153 +960,150 @@ License: GPL-3.0-or-later
 
 Valaモードに使う色々な関数 (もう内容をあまり思い出せない‥‥‥)
 
-#+BEGIN_SRC emacs-lisp
-  (setq tt-indent-offset 4)
++begin_src emacs-lisp
+  (defun not-used-tt-vala-mode-1()
+    (setq tt-indent-offset 4)
 
-  (defadvice indent-rigidly (after deactivate-mark-nil activate)
-    (setq deactivate-mark nil))
+    (defadvice indent-rigidly (after deactivate-mark-nil activate)
+      (setq deactivate-mark nil))
 
-  (defun tt-indent-region (offset)
-    (let ((p1 (mark))
-          (p2 (point)))
-      (indent-rigidly (min p1 p2) (max p1 p2) offset)))
+    (defun tt-indent-region (offset)
+      (interactive)
+      (let ((p1 (mark))
+            (p2 (point)))
+        (indent-rigidly (min p1 p2) (max p1 p2) offset)))
 
-  (defun tt-indent-right (offset)
-    (let* ((cc (current-column)) (i (+ cc 1)))
-      (while (not (= (% i offset) 0))
-        (setq i (+ i 1)))
-      (indent-to i)))
+    (defun tt-indent-right (offset)
+      (interactive)
+      (let* ((cc (current-column)) (i (+ cc 1)))
+        (while (not (= (% i offset) 0))
+          (setq i (+ i 1)))
+        (indent-to i)))
 
-  (defun tt-indent-left (offset)
-    (let ((save-column (current-column)) (num-killed-chars 0))
-      (beginning-of-line)
-      (while (and (> offset 0) (= (char-after (point)) 32))
-        (delete-char 1)
-        (setq offset (- offset 1))
-        (setq num-killed-chars (+ num-killed-chars 1)))
-      (move-to-column (- save-column num-killed-chars))))
+    (defun tt-indent-left (offset)
+      (interactive)
+      (let ((save-column (current-column)) (num-killed-chars 0))
+        (beginning-of-line)
+        (while (and (> offset 0) (= (char-after (point)) 32))
+          (delete-char 1)
+          (setq offset (- offset 1))
+          (setq num-killed-chars (+ num-killed-chars 1)))
+        (move-to-column (- save-column num-killed-chars)))
 
-  (defun tt-indent (offset)
-    (if mark-active
-        (tt-indent-region offset)
-      (if (> offset 0)
-          (tt-indent-right offset)
-        (tt-indent-left (- 0 offset)))))
+    (defun tt-indent (offset)
+      (interactive)
+      (if mark-active
+          (tt-indent-region offset)
+        (if (> offset 0)
+            (tt-indent-right offset)
+          (tt-indent-left (- 0 offset))))
 
-  (defun tt-newline-and-indent ()
-    (if (= 0 (- (point) (line-number-at-pos)))
-        (newline)
-      (let ((auto-indent-offset (let ((before-char (char-before (point))))
-                                  (if (and (not (null before-char)) (or (= before-char 123) (= before-char 40)))
-                                      tt-indent-offset
-                                    0))))
-        (newline)
-        (indent-relative-maybe)
-        (if (> auto-indent-offset 0)
-            (tt-indent auto-indent-offset)))))
-#+END_SRC
+    (defun tt-newline-and-indent ()
+      (interactive)
+      (if (= 0 (- (point) (line-number-at-pos)))
+          (newline)
+        (let ((auto-indent-offset (let ((before-char (char-before (point))))
+                                    (if (and (not (null before-char)) (or (= before-char 123) (= before-char 40)))
+                                        tt-indent-offset
+                                      0))))
+          (newline)
+          (indent-relative-maybe)
+          (if (> auto-indent-offset 0)
+              (tt-indent auto-indent-offset))))
+    )
++end_src
 
 
 Valaのコメント記号
 
-#+BEGIN_SRC emacs-lisp  
-  (setq tt-vala-comment-list
-        '("//" ("/*" . "*/")))
-#+END_SRC
++begin_src emacs-lisp  
+  (defun not-used-tt-vala-mode-2()
+    (setq tt-vala-comment-list
+          '("//" ("/*" . "*/")))
++end_src
 
 
 Valaの予約語一覧
 
-#+BEGIN_SRC emacs-lisp
-  (setq tt-vala-keyword-list
-        '("if" "else" "switch" "case" "default" "do" "while" "for" "foreach" "in" "break"
-          "continue" "return" "try" "catch" "finally" "throw" "lock" "class" "interface"
-          "struct" "enum" "delegate" "errordomain" "const" "weak" "unowned" "dynamic"
-          "callback" "begin" "end" "abstract" "virtual" "override" "signal" "extern"
-          "static" "async" "inline" "new" "public" "private" "protected" "internal" "out"
-          "ref" "throws" "requires" "ensures" "namespace" "using" "as" "is" "in" "new"
-          "delete" "sizeof" "typeof" "this" "base" "get" "set" "construct" "default"
-          "value" "connect" "construct" "static construct" "class construct" "var" "yield"
-          "global" "owned" "with"))
-
-#+END_SRC
++begin_src emacs-lisp
+  (defun not-used-tt-vala-mode-3()
+    (setq tt-vala-keyword-list
+          '("if" "else" "switch" "case" "default" "do" "while" "for" "foreach" "in" "break"
+            "continue" "return" "try" "catch" "finally" "throw" "lock" "class" "interface"
+            "struct" "enum" "delegate" "errordomain" "const" "weak" "unowned" "dynamic"
+            "callback" "begin" "end" "abstract" "virtual" "override" "signal" "extern"
+            "static" "async" "inline" "new" "public" "private" "protected" "internal" "out"
+            "ref" "throws" "requires" "ensures" "namespace" "using" "as" "is" "in" "new"
+            "delete" "sizeof" "typeof" "this" "base" "get" "set" "construct" "default"
+            "value" "connect" "construct" "static construct" "class construct" "var" "yield"
+            "global" "owned" "with"))
+    )
++end_src
 
 
 色付けのための正規表現のリスト
 
-#+BEGIN_SRC emacs-lisp
-  (setq tt-vala-face-list
-        `(("\"\"\".*\"\"\"" . font-lock-string-face)
-          ("\".*\"" . font-lock-string-face)
-          ("'[^']*'" . font-lock-string-face)
-          ("[][+-/*%=^~|{}()!&><;:,.?/@$]" . font-lock-builtin-face)
-          (,(regexp-opt '("true" "false" "null" "void" "int" "uint"
-                          "long" "string" "double" "int8" "uint8"
-                          "int16" "uint16" "int32" "uint32" "int64"
-                          "uint64" "float" "bool" "char" "uchar")
-                        'symbols)
-           . font-lock-builtin-face)
-          ("\\<[@A-Z_][A-Z0-9_]+\\>" . font-lock-constant-face)
-          ("\\<[0-9]+\\>" . font-lock-constant-face)
-          ("\\<[A-Z][A-Za-z0-9_]+\\>" . font-lock-type-face)))
-#+END_SRC
++begin_src emacs-lisp
+  (defun not-used-tt-vala-mode-4()
+    (setq tt-vala-face-list
+          `(("\"\"\".*\"\"\"" . font-lock-string-face)
+            ("\".*\"" . font-lock-string-face)
+            ("'[^']*'" . font-lock-string-face)
+            ("[][+-/*%=^~|{}()!&><;:,.?/@$]" . font-lock-builtin-face)
+            (,(regexp-opt '("true" "false" "null" "void" "int" "uint"
+                            "long" "string" "double" "int8" "uint8"
+                            "int16" "uint16" "int32" "uint32" "int64"
+                            "uint64" "float" "bool" "char" "uchar")
+                          'symbols)
+             . font-lock-builtin-face)
+            ("\\<[@A-Z_][A-Z0-9_]+\\>" . font-lock-constant-face)
+            ("\\<[0-9]+\\>" . font-lock-constant-face)
+            ("\\<[A-Z][A-Za-z0-9_]+\\>" . font-lock-type-face)))
+    )
++end_src
 
++begin_src emacs-lisp
+  (defun not-used-tt-vala-mode-5()
+    (defun tt-vala-mode-setup-func()
+      (interactive)
+      (local-set-key (kbd "X-i") 'tt-indent-left)
+      (local-set-key (kbd "C-i") (lambda() (interactive) (tt-indent tt-indent-offset)))
+      )
+    )
++end_src
 
 ジェネリック・モードとしてValaモードを作成する
 
-#+BEGIN_SRC emacs-lisp
-  (define-generic-mode tt-vala-mode
-    tt-vala-comment-list
-    tt-vala-keyword-list
-    tt-vala-face-list
-    '("\\.vala\\'" "\\.vapi\\'")
-    nil
-    ;; &optional docstring
-    "This is a major mode for editing vala programming language")
-#+END_SRC
++begin_src emacs-lisp
+  (defun not-used-tt-vala-mode-6()
+    (define-generic-mode tt-vala-mode
+      tt-vala-comment-list
+      tt-vala-keyword-list
+      tt-vala-face-list
+      '("\\.vala\\'" "\\.vapi\\'")
+      (list #'tt-vala-mode-setup-func)
+      ;; &optional docstring
+      "This is a major mode for editing vala programming language")
+    )
++end_src
 
-** フレームサイズ frame-sizing
-*** init-frame関数
-好みのウィンドウ設定
-スクロールバー：表示する
-メニューバー：表示する
-ツールバー：表示しない
-
-#+BEGIN_SRC emacs-lisp
-  (defun init-frame()
-    (scroll-bar-mode 0)
-    (menu-bar-mode 0)
-    (tool-bar-mode 0)
-    (set-frame-size (selected-frame) 120 45)
-    (setq line-spacing 0)
-    (set-window-scroll-bars (minibuffer-window) nil nil))
-#+END_SRC
-
-フレームの初期設定実行
+*** Valaモード (2)
+改良版を作った。
+ChatGPTにベースを作らせてちょこちょこ修正。
 
 #+BEGIN_SRC emacs-lisp
-  (init-frame)
-#+END_SRC
-
-*** create-new-frame関数
-新規のフレーム (ウィンドウ) を開き、好みの設定を反映する。
-
-#+BEGIN_SRC emacs-lisp
-  (defun create-new-frame ()
-    "新しいウィンドウ (フレーム) を開いた時に大きさやスクロールバーなどを調整する。"
-    (select-frame (make-frame))
-    (init-frame))
+  (require 'my-vala-mode)
 #+END_SRC
 
 ** モードごとの設定 mode-settings
 *** DDSKKの設定
-
+**** 初期設定
 #+BEGIN_SRC emacs-lisp
   (require 'ddskk-autoloads)
   (setq skk-large-jisyo "~/.emacs.d/SKK-JISYO.L")
 #+END_SRC
 
-*** helmモードの設定
+*** helmモードの設定 (不使用)
 BEGIN_SRC emacs-lisp
  ;; Helmの設定
   (require 'helm)
@@ -1585,7 +1141,7 @@ BEGIN_SRC emacs-lisp
 
 END_SRC
 *** shellモードの設定
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'shell-script-mode-hook
             (lambda nil
@@ -1594,14 +1150,145 @@ END_SRC
 #+END_SRC
 
 *** orgモードの設定
+**** 見出しを1階層ずつ開く関数を設定 (C-<tab>で実行)
+OrgModeの時、見出しの上で「C-<tab>」キーを押すと子見出しを1階層ずつ開いていく機能を実装。
+ChatGPTに作らせたコードをベースにちょこちょこ修正して作成。
+
+***** カスタム変数
+#+BEGIN_SRC emacs-lisp
+  (defvar my-org-cycle-last-pos nil)
+  (defvar my-org-cycle-last-depth 0)
+#+END_SRC
+
+***** 見出しを再帰的に開く関数
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-show-children-recursive (depth)
+    "現在の見出しから、指定されたDEPTH階層まで子見出しを再帰的に表示する。"
+    (when (org-at-heading-p)
+      ;;(org-show-entry)
+      (when (> depth 0)
+        (save-excursion
+          (org-show-children 0)
+          (let ((end (save-excursion (org-end-of-subtree t t))))
+            (org-next-visible-heading 1)
+            (while (< (point) end)
+              (when (org-at-heading-p)
+                (my-org-show-children-recursive (1- depth))
+                (let ((my-save-point (point)))
+                  (org-forward-heading-same-level 1)
+                  (when (= my-save-point (point))
+                    (outline-up-heading 1)
+                    (org-forward-heading-same-level 1))))))))))
+#+END_SRC
+
+***** コマンド関数。起動判定とか。
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-cycle-stepwise ()
+    "現在の見出しから、1階層ずつ子要素を展開していく。別の見出しに移動するとリセット。"
+    (interactive)
+    (when (org-at-heading-p)
+      (let ((pos (point)))
+        (if (eq pos my-org-cycle-last-pos)
+            (setq my-org-cycle-last-depth (1+ my-org-cycle-last-depth))
+          (progn (setq my-org-cycle-last-pos pos)
+                 (setq my-org-cycle-last-depth 1))))
+      (my-org-show-children-recursive my-org-cycle-last-depth)))
+
+#+END_SRC
+
+***** OrgModeのキーバインディングに登録する
+#+BEGIN_SRC emacs-lisp
+  (define-key org-mode-map (kbd "C-<tab>") 'my-org-cycle-stepwise)
+#+END_SRC
+
+***** カーソルを移動したら状態をリセットしてまた1から開くようにする
+#+BEGIN_SRC emacs-lisp
+(defun my-org-cycle-reset-on-move ()
+  "カーソル移動したら cycle 状態をリセットする。"
+  (when (and (eq major-mode 'org-mode)
+             (not (eq (point) my-org-cycle-last-pos)))
+    (setq my-org-cycle-last-pos nil)
+    (setq my-org-cycle-last-depth 0)))
+
+(defun my-org-cycle-setup-reset-hook ()
+  "org-mode用にpost-command-hookを設定"
+  (add-hook 'post-command-hook #'my-org-cycle-reset-on-move nil t))
+
+(add-hook 'org-mode-hook #'my-org-cycle-setup-reset-hook)
+
+#+END_SRC
+
+**** 画像ファイルをドラッグ&ドロップしてパスを挿入する
+ChatGPTに頼んで作らせたのものをベースに作ってるけど、うまいことカーソル位置に画像パスが挿入されてくれない不具合がある。
+
+***** OrgModeファイルの見出しをパスに変換する関数
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-heading-path-sanitized ()
+    "現在のorg-mode見出し階層を取得して、スラッシュなどをパス用にサニタイズする。"
+    (when (derived-mode-p 'org-mode)
+      (let ((path nil))
+        (save-excursion
+          (while (org-up-heading-safe)
+            (push (my-sanitize-path-component (org-get-heading t t t t)) path))
+          (push (my-sanitize-path-component (org-get-heading t t t t)) path))
+        path)))
+
+  (defun my-sanitize-path-component (s)
+    "パス名に使えない文字（例：/）を安全な文字に置き換える。"
+    (replace-regexp-in-string "/" "-" s))
+
+#+END_SRC
+
+***** 本体関数
 orgモードのキーバインディングには上の方で定義しているifuncマクロを使用している。
 
 #+BEGIN_SRC emacs-lisp
+  (defun my-org-dnd-insert-image-under-heading (uri action)
+    "Orgバッファで画像ファイルをドロップしたときに、見出しに対応したフォルダにコピーし、リンクを挿入する。"
+    (let ((decoded (dnd-get-local-file-name uri t)))
+      (when (and decoded (file-exists-p decoded))
+        (let* ((ext (downcase (or (file-name-extension decoded) ""))))
+          (when (member ext '("png" "jpg" "jpeg" "gif" "svg" "webp"))
+            ;; 見出しパスを取得 → スラッシュを安全な文字に変換
+            (let ((heading-path (my-org-heading-path-sanitized)))
+              (when heading-path
+                (let* ((target-dir (expand-file-name (mapconcat #'identity heading-path "/") default-directory)))
+                  (unless (file-directory-p target-dir)
+                    (make-directory target-dir t))
+                  ;; リネーム：img_YYYYMMDD_HHMMSS.ext
+                  (let* ((timestamp (format-time-string "%Y%m%d_%H%M%S"))
+                         (new-name (format "img_%s.%s" timestamp ext))
+                         (target-path (expand-file-name new-name target-dir)))
+                    (copy-file decoded target-path t)
+                    (let ((rel-path (file-relative-name target-path default-directory)))
+                      (insert (format "[[file:%s]]" rel-path))
+                      t))))))))))
+
+#+END_SRC
+
+***** ドラッグ&ドロップのフックに登録する
+#+BEGIN_SRC emacs-lisp
+  (defun enable-my-org-dnd-insert-image ()
+    "Orgモードで画像ドラッグ＆ドロップを有効にする。"
+    (interactive)
+    (when (derived-mode-p 'org-mode)
+      (add-hook 'dnd-protocol-alist
+                '("^file:" . my-org-dnd-insert-image-under-heading)
+                nil t)))
+#+END_SRC
+
+**** フックの設定
+#+BEGIN_SRC emacs-lisp
   ;; org-modeの設定
+
+  (setq org-hide-leading-stars t)
+  (setq org-startup-indented t)
+
   (add-hook 'org-mode-hook
             (lambda nil
-              (org-indent-mode)
+              (font-lock-mode t)
               (display-line-numbers-mode 1)
+              (enable-my-org-dnd-insert-image)
               (local-set-key (kbd "C-M-f") (ifunc (org-shiftmetaright)))
               (local-set-key (kbd "C-M-b") (ifunc (org-shiftmetaleft)))
               (local-set-key (kbd "C-S-f") (ifunc (org-shiftright)))
@@ -1634,7 +1321,7 @@ org-modeで使うスニペットのような関数
 #+END_SRC
 
 *** CSVモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'csv-mode-hook
             (lambda nil
@@ -1646,7 +1333,7 @@ org-modeで使うスニペットのような関数
 #+END_SRC
 
 *** YAMLモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
 (add-hook 'yaml-mode
           (lambda ()
@@ -1655,7 +1342,7 @@ org-modeで使うスニペットのような関数
 #+END_SRC
 
 *** Cモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'c-mode-hook
             (lambda ()
@@ -1668,7 +1355,7 @@ org-modeで使うスニペットのような関数
 #+END_SRC
 
 *** Emacs LISPモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'emacs-lisp-mode-hook
             (lambda ()
@@ -1677,7 +1364,7 @@ org-modeで使うスニペットのような関数
 #+END_SRC
 
 *** Makeモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'make-mode-hook
             (lambda ()
@@ -1696,7 +1383,7 @@ org-modeで使うスニペットのような関数
     (beginning-of-buffer)
     (insert "---\n")
     (insert "title: ") (put-buffer-name) (insert "\n")
-    (insert (format "date: %s\n" (string-trim-right (shell-command-to-string "date /t"))))
+    (insert (format "date: %s\n" (string-trim-right (shell-command-to-string "date +%Y-%m-%d"))))
     (insert "---\n")))
 #+END_SRC
 
@@ -1793,7 +1480,41 @@ cl-adjoinは追加したい要素がリストに含まれていない場合の�
       (cl-adjoin element list)))
 #+END_SRC
 
+***** my-markdown-dnd-copy-image-to-img-dir関数
+
+Markdownファイルに画像ファイルをドラッグ&ドロップした時に、![img](画像ファイルの相対パス)を挿入する
+更に、Markdownファイルと同じディレクトリを作り、そこにファイル名を日付フォーマットした上でコピーする。
+
+#+BEGIN_SRC emacs-lisp
+  (defun my-markdown-dnd-copy-image-to-img-dir (uri action)
+    "画像を ./img にコピーして、Markdownリンクを挿入する。"
+    (let ((decoded (dnd-get-local-file-name uri t)))
+      (when (and decoded (file-exists-p decoded))
+        (let* ((img-dir "./img")
+               (ext (downcase (or (file-name-extension decoded) ""))))
+          (when (member ext '("png" "jpg" "jpeg" "gif" "svg" "webp"))
+            (unless (file-directory-p img-dir)
+              (make-directory img-dir))  ; ./img がなければ作る
+            ;; リネーム：img_YYYYMMDD_HHMMSS.ext
+            (let* ((timestamp (format-time-string "%Y%m%d_%H%M%S"))
+                   (new-name (format "img_%s.%s" timestamp ext))
+                   (new-path (expand-file-name new-name img-dir)))
+              (copy-file decoded new-path t) ; 上書きOKでコピー
+              (let ((rel-path (file-relative-name new-path default-directory)))
+                (insert (format "![img](%s)" rel-path))
+                t)))))))
+  
+  (defun enable-my-markdown-dnd-copy ()
+    "MarkdownモードでD&D画像を ./img にコピー＆挿入する設定を有効にする。"
+    (interactive)
+    (when (derived-mode-p 'markdown-mode)
+      (add-hook 'dnd-protocol-alist
+                '("^file:" . my-markdown-dnd-copy-image-to-img-dir)
+                nil t)))
+#+END_SRC
+
 **** Markdownの設定
+***** テーブルとコードのフォントを等幅にする設定
 理屈はよくわからないが、この設定をすることでテーブルとコードのフォントのみ等幅になる。
 
 #+BEGIN_SRC emacs-lisp
@@ -1809,12 +1530,15 @@ cl-adjoinは追加したい要素がリストに含まれていない場合の�
       (list 'markdown-pre-face 'markdown-inline-code-face 'markdown-table-face)))
 #+END_SRC
 
-
 Markdownモードの設定を行なう。
 
+***** プレビューモードの自動読み込み
 #+BEGIN_SRC emacs-lisp
   (autoload 'markdown-preview-mode "markdown-preview-mode.el" t)
+#+END_SRC
 
+***** フックの設定
+#+BEGIN_SRC emacs_lisp
   (add-hook 'markdown-mode-hook
             (lambda nil
               (display-line-numbers-mode)
@@ -1823,6 +1547,7 @@ Markdownモードの設定を行なう。
               (variable-pitch-mode 1) ;; デフォルトのフォントを可変幅フォントにする
               (electric-quote-local-mode 1)
               (visual-line-mode 1)
+              (enable-my-markdown-dnd-copy) ;;画像ファイルのドラッグ&ドロップを有効にする
               ;;(skk-mode 1)
               (local-set-key (kbd "C-c n") 'put-buffer-name-in-markdown-metadata)
               (local-set-key (kbd "C-c C-c k") 'markdown-ex-add-category)
@@ -1838,7 +1563,7 @@ Markdownモードの設定を行なう。
 #+END_SRC
 
 *** Webモードの設定
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'web-mode-hook
             (lambda ()
@@ -1848,7 +1573,6 @@ Markdownモードの設定を行なう。
 #+END_SRC
 
 *** nXMLモードの設定
-
 #+BEGIN_SRC emacs-lisp
 ;; auto-complete-nxmlの設定
 ;; Keystroke for popup help about something at point.
@@ -1860,7 +1584,7 @@ Markdownモードの設定を行なう。
 #+END_SRC
 
 *** Javaモード
-
+**** フックの設定
 #+BEGIN_SRC emacs-lisp
   (add-hook 'java-mode-hook
             (lambda ()
@@ -1931,4 +1655,14 @@ Markdownモードの設定を行なう。
   (add-hook 'compilation-filter-hook
             #'endless/colorize-compilation)
 #+END_SRC
+
+** 追加設定
+ここにどう書けばいいかわからないが、カスタマイズ設定の手順も書いとく
+
+*** フォント設定
+メニュー → オプション → デフォルトフォントの設定
+
+M-x customize-face line-number,line-number-current-line,org-block,org-block-begin-line,org-block-end-line
+
+フォントの個別設定をする。
 
