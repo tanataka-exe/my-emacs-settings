@@ -1,0 +1,3 @@
+[submodule "my-emacs-vala-mode"]
+	path = my-emacs-vala-mode
+	url = git@github.com:tanataka-exe/my-emacs-vala-mode.git
